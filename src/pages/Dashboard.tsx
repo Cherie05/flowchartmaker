@@ -2,17 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { flowchartService } from '../services/flowchartService';
-import {
-  Plus,
-  LogOut,
-  Trash2,
-  Copy,
-  Edit,
-  Loader,
-  Layers,
-  FileText,
-  Clock
-} from 'lucide-react';
+import { Plus, LogOut, Trash2, Copy, CreditCard as Edit, Loader, Layers, FileText, Clock } from 'lucide-react';
 
 interface FlowchartItem {
   id: string;
