@@ -1,4 +1,4 @@
-import { AIFlowChartRequest, AIFlowChartResponse } from '../types/flowChart';
+import type { AIFlowChartConnection, AIFlowChartRequest, AIFlowChartResponse } from '../types/flowChart';
 
 class AIFlowChartService {
   private templates = {
@@ -15,12 +15,12 @@ class AIFlowChartService {
         { type: 'end', position: { x: 200, y: 680 }, text: 'Registration Complete', width: 160, height: 60 }
       ],
       connections: [
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'Invalid' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Valid' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' }
+        createConnection(0, 1, 'bottom', 'top'),
+        createConnection(1, 2, 'bottom', 'top'),
+        createConnection(2, 3, 'right', 'left', 'Invalid'),
+        createConnection(2, 4, 'bottom', 'top', 'Valid'),
+        createConnection(4, 5, 'bottom', 'top'),
+        createConnection(5, 6, 'bottom', 'top')
       ]
     },
     'order processing': {
@@ -38,14 +38,14 @@ class AIFlowChartService {
         { type: 'end', position: { x: 200, y: 820 }, text: 'Order Complete', width: 120, height: 60 }
       ],
       connections: [
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'Invalid' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Valid' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'No Stock' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Available' },
-        { fromSide: 'bottom', toSide: 'top', label: '' }
+        createConnection(0, 1, 'bottom', 'top'),
+        createConnection(1, 2, 'bottom', 'top'),
+        createConnection(2, 3, 'right', 'left', 'Invalid'),
+        createConnection(2, 4, 'bottom', 'top', 'Valid'),
+        createConnection(4, 5, 'bottom', 'top'),
+        createConnection(5, 6, 'right', 'left', 'No Stock'),
+        createConnection(5, 7, 'bottom', 'top', 'Available'),
+        createConnection(7, 8, 'bottom', 'top')
       ]
     },
     'software development': {
@@ -63,36 +63,34 @@ class AIFlowChartService {
         { type: 'end', position: { x: 200, y: 960 }, text: 'Project Complete', width: 140, height: 60 }
       ],
       connections: [
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'Fail' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Pass' },
-        { fromSide: 'bottom', toSide: 'top', label: '' }
+        createConnection(0, 1, 'bottom', 'top'),
+        createConnection(1, 2, 'bottom', 'top'),
+        createConnection(2, 3, 'bottom', 'top'),
+        createConnection(3, 4, 'bottom', 'top'),
+        createConnection(4, 5, 'bottom', 'top'),
+        createConnection(5, 6, 'right', 'left', 'Fail'),
+        createConnection(5, 7, 'bottom', 'top', 'Pass'),
+        createConnection(7, 8, 'bottom', 'top')
       ]
     }
   };
 
   async generateFlowChart(request: AIFlowChartRequest): Promise<AIFlowChartResponse> {
-    // Simulate AI processing delay
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     const description = request.description.toLowerCase();
-    
-    // Find matching template
+    const compactDescription = description.replace(/\s+/g, '');
+
     for (const [key, template] of Object.entries(this.templates)) {
-      if (description.includes(key.replace(' ', '')) || description.includes(key)) {
+      if (compactDescription.includes(key.replace(/\s+/g, '')) || description.includes(key)) {
         return template as AIFlowChartResponse;
       }
     }
 
-    // Check for common keywords and generate appropriate flows
     if (description.includes('login') || description.includes('authentication')) {
       return this.generateLoginFlow();
     }
-    
+
     if (description.includes('payment') || description.includes('checkout')) {
       return this.generatePaymentFlow();
     }
@@ -101,7 +99,6 @@ class AIFlowChartService {
       return this.generateApprovalFlow();
     }
 
-    // Generate a generic process flow
     return this.generateGenericFlow(request.description);
   }
 
@@ -118,11 +115,11 @@ class AIFlowChartService {
         { type: 'end', position: { x: 200, y: 540 }, text: 'Login Success', width: 120, height: 60 }
       ],
       connections: [
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'Invalid' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Valid' },
-        { fromSide: 'bottom', toSide: 'top', label: '' }
+        createConnection(0, 1, 'bottom', 'top'),
+        createConnection(1, 2, 'bottom', 'top'),
+        createConnection(2, 3, 'right', 'left', 'Invalid'),
+        createConnection(2, 4, 'bottom', 'top', 'Valid'),
+        createConnection(4, 5, 'bottom', 'top')
       ]
     };
   }
@@ -141,12 +138,12 @@ class AIFlowChartService {
         { type: 'end', position: { x: 200, y: 680 }, text: 'Payment Complete', width: 140, height: 60 }
       ],
       connections: [
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'Invalid' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Valid' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' }
+        createConnection(0, 1, 'bottom', 'top'),
+        createConnection(1, 2, 'bottom', 'top'),
+        createConnection(2, 3, 'right', 'left', 'Invalid'),
+        createConnection(2, 4, 'bottom', 'top', 'Valid'),
+        createConnection(4, 5, 'bottom', 'top'),
+        createConnection(5, 6, 'bottom', 'top')
       ]
     };
   }
@@ -164,11 +161,11 @@ class AIFlowChartService {
         { type: 'end', position: { x: 200, y: 540 }, text: 'Process Complete', width: 140, height: 60 }
       ],
       connections: [
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'bottom', toSide: 'top', label: '' },
-        { fromSide: 'right', toSide: 'left', label: 'No' },
-        { fromSide: 'bottom', toSide: 'top', label: 'Yes' },
-        { fromSide: 'bottom', toSide: 'top', label: '' }
+        createConnection(0, 1, 'bottom', 'top'),
+        createConnection(1, 2, 'bottom', 'top'),
+        createConnection(2, 3, 'right', 'left', 'No'),
+        createConnection(2, 4, 'bottom', 'top', 'Yes'),
+        createConnection(4, 5, 'bottom', 'top')
       ]
     };
   }
@@ -178,7 +175,6 @@ class AIFlowChartService {
     const nodes = [];
     const connections = [];
 
-    // Start node
     nodes.push({
       type: 'start' as const,
       position: { x: 200, y: 50 },
@@ -188,9 +184,8 @@ class AIFlowChartService {
     });
 
     let yOffset = 150;
-    
-    // Process nodes for each step
-    steps.forEach((step, index) => {
+
+    steps.forEach(step => {
       nodes.push({
         type: 'process' as const,
         position: { x: 200, y: yOffset },
@@ -199,16 +194,13 @@ class AIFlowChartService {
         height: 80
       });
 
-      connections.push({
-        fromSide: 'bottom' as const,
-        toSide: 'top' as const,
-        label: ''
-      });
+      connections.push(
+        createConnection(nodes.length - 2, nodes.length - 1, 'bottom', 'top')
+      );
 
       yOffset += 140;
     });
 
-    // End node
     nodes.push({
       type: 'end' as const,
       position: { x: 200, y: yOffset },
@@ -217,11 +209,7 @@ class AIFlowChartService {
       height: 60
     });
 
-    connections.push({
-      fromSide: 'bottom' as const,
-      toSide: 'top' as const,
-      label: ''
-    });
+    connections.push(createConnection(nodes.length - 2, nodes.length - 1, 'bottom', 'top'));
 
     return {
       nodes,
@@ -232,11 +220,9 @@ class AIFlowChartService {
   }
 
   private extractStepsFromDescription(description: string): string[] {
-    // Enhanced extraction logic
-    const sentences = description.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    
+    const sentences = description.split(/[.!?]+/).filter(sentence => sentence.trim().length > 0);
+
     if (sentences.length <= 1) {
-      // If only one sentence, create generic steps
       return [
         'Initialize Process',
         'Execute Main Task',
@@ -244,12 +230,30 @@ class AIFlowChartService {
         'Finalize Process'
       ];
     }
-    
-    return sentences.map(s => {
-      const cleaned = s.trim().replace(/^(then|next|after|finally)/i, '');
-      return cleaned.length > 40 ? cleaned.substring(0, 37) + '...' : cleaned;
-    }).slice(0, 6); // Limit to 6 steps max
+
+    return sentences
+      .map(sentence => {
+        const cleaned = sentence.trim().replace(/^(then|next|after|finally)/i, '');
+        return cleaned.length > 40 ? `${cleaned.substring(0, 37)}...` : cleaned;
+      })
+      .slice(0, 6);
   }
 }
 
 export const aiService = new AIFlowChartService();
+
+function createConnection(
+  fromIndex: number,
+  toIndex: number,
+  fromSide: AIFlowChartConnection['fromSide'],
+  toSide: AIFlowChartConnection['toSide'],
+  label = ''
+): AIFlowChartConnection {
+  return {
+    fromIndex,
+    toIndex,
+    fromSide,
+    toSide,
+    label
+  };
+}

@@ -1,3 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color: #0f172a;
+    background:
+      radial-gradient(circle at top left, rgba(255, 190, 118, 0.22), transparent 28%),
+      radial-gradient(circle at 80% 0%, rgba(125, 173, 255, 0.18), transparent 24%),
+      linear-gradient(180deg, #f9f6ef 0%, #f4f1e8 100%);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  html {
+    min-height: 100%;
+    background: #f9f6ef;
+  }
+
+  body {
+    min-height: 100vh;
+    background: transparent;
+    color: #0f172a;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    letter-spacing: -0.03em;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  ::selection {
+    background: rgba(251, 146, 60, 0.24);
+    color: #111827;
+  }
+}

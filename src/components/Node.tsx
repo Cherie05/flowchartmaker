@@ -1,5 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { FlowChartNode } from '../types/flowChart';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent
+} from 'react';
+import type { FlowChartNode, NodeSide } from '../types/flowChart';
 
 interface NodeProps {
   node: FlowChartNode;
@@ -11,24 +17,23 @@ interface NodeProps {
   onMove: (position: { x: number; y: number }) => void;
   onTextChange: (text: string) => void;
   onDelete: () => void;
-  onConnect: (nodeId: string, side: 'top' | 'right' | 'bottom' | 'left') => void;
+  onConnect: (nodeId: string, side: NodeSide) => void;
 }
 
-export function Node({ 
-  node, 
-  isSelected, 
+export function Node({
+  node,
+  isSelected,
   isDragging,
-  onSelect, 
+  onSelect,
   onDragStart,
   onDragEnd,
-  onMove, 
+  onMove,
   onTextChange,
   onDelete,
   onConnect
 }: NodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
-  const nodeRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,9 +43,10 @@ export function Node({
     }
   }, [isEditing]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Don't start drag if clicking on connection points
-    if ((e.target as HTMLElement).classList.contains('connection-point')) {
+  const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+
+    if (isEditing || target.classList.contains('connection-point') || target.closest('button, input')) {
       return;
     }
 
@@ -49,16 +55,16 @@ export function Node({
     onSelect();
     setIsDraggingNode(true);
     onDragStart();
-    
+
     const startX = e.clientX;
     const startY = e.clientY;
     const startNodeX = node.position.x;
     const startNodeY = node.position.y;
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-      
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+
       onMove({
         x: Math.max(0, startNodeX + deltaX),
         y: Math.max(0, startNodeY + deltaY)
@@ -76,8 +82,9 @@ export function Node({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
+  const handleDoubleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
+
     if (!isDraggingNode) {
       setIsEditing(true);
     }
@@ -87,80 +94,89 @@ export function Node({
     setIsEditing(false);
   };
 
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+  const handleInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     e.stopPropagation();
+
     if (e.key === 'Enter') {
       handleInputSubmit();
     }
+
     if (e.key === 'Escape') {
       setIsEditing(false);
     }
   };
 
-  const handleConnectionPoint = (side: 'top' | 'right' | 'bottom' | 'left') => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onConnect(node.id, side);
-  };
+  const handleConnectionPoint =
+    (side: NodeSide) => (e: ReactMouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onConnect(node.id, side);
+    };
 
   const getNodeShape = () => {
-    const baseClasses = `absolute select-none transition-all duration-200 border-2 flex items-center justify-center text-sm font-medium ${
-      isSelected ? 'border-blue-500 shadow-lg ring-2 ring-blue-200' : 'border-gray-300 hover:border-gray-400'
-    } ${isDragging ? 'z-50 opacity-75 cursor-grabbing' : 'z-10 cursor-grab'}`;
+    const baseClasses = [
+      'absolute pointer-events-auto select-none border text-sm font-medium',
+      'flex items-center justify-center transition-[transform,box-shadow,border-color,opacity] duration-200',
+      isSelected
+        ? 'border-orange-300 ring-4 ring-orange-100 shadow-[0_20px_55px_-24px_rgba(249,115,22,0.34)]'
+        : 'shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)] hover:-translate-y-0.5',
+      isDragging ? 'z-50 opacity-80 cursor-grabbing' : 'z-10 cursor-grab'
+    ].join(' ');
 
     switch (node.type) {
       case 'start':
-        return `${baseClasses} rounded-full bg-gradient-to-br from-green-400 to-green-500 text-white shadow-md`;
+        return `${baseClasses} rounded-full border-emerald-200 bg-emerald-50 text-emerald-950`;
       case 'end':
-        return `${baseClasses} rounded-full bg-gradient-to-br from-red-400 to-red-500 text-white shadow-md`;
+        return `${baseClasses} rounded-full border-rose-200 bg-rose-50 text-rose-950`;
       case 'process':
-        return `${baseClasses} rounded-lg bg-gradient-to-br from-blue-400 to-blue-500 text-white shadow-md`;
+        return `${baseClasses} rounded-[24px] border-sky-200 bg-white text-slate-900`;
       case 'decision':
-        return `${baseClasses} bg-gradient-to-br from-yellow-400 to-yellow-500 text-white transform rotate-45 shadow-md`;
+        return `${baseClasses} rounded-[26px] border-amber-200 bg-amber-50 text-amber-950 transform rotate-45`;
       case 'connector':
-        return `${baseClasses} rounded-full bg-gradient-to-br from-purple-400 to-purple-500 text-white shadow-md`;
+        return `${baseClasses} rounded-full border-violet-200 bg-violet-50 text-violet-950`;
       default:
-        return `${baseClasses} rounded-lg bg-white shadow-md`;
+        return `${baseClasses} rounded-[24px] border-slate-200 bg-white text-slate-900`;
     }
   };
 
+  const { textColor, ...customStyle } = node.style ?? {};
+
   return (
     <div
-      ref={nodeRef}
       className={`group ${getNodeShape()}`}
       style={{
         left: node.position.x,
         top: node.position.y,
         width: node.width,
         height: node.height,
-        ...(node.style || {})
+        ...customStyle,
+        ...(textColor ? { color: textColor } : {})
       }}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
-      {/* Connection points - only show when selected or hovering */}
       {(isSelected || isDragging) && (
         <>
-          <div 
-            className="connection-point absolute w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md cursor-pointer hover:bg-blue-600 transition-colors duration-200 z-30"
+          <div
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
             style={{ top: -8, left: '50%', transform: 'translateX(-50%)' }}
             onClick={handleConnectionPoint('top')}
             title="Connect from top"
           />
-          <div 
-            className="connection-point absolute w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md cursor-pointer hover:bg-blue-600 transition-colors duration-200 z-30"
+          <div
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
             style={{ right: -8, top: '50%', transform: 'translateY(-50%)' }}
             onClick={handleConnectionPoint('right')}
             title="Connect from right"
           />
-          <div 
-            className="connection-point absolute w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md cursor-pointer hover:bg-blue-600 transition-colors duration-200 z-30"
+          <div
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
             style={{ bottom: -8, left: '50%', transform: 'translateX(-50%)' }}
             onClick={handleConnectionPoint('bottom')}
             title="Connect from bottom"
           />
-          <div 
-            className="connection-point absolute w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md cursor-pointer hover:bg-blue-600 transition-colors duration-200 z-30"
+          <div
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
             style={{ left: -8, top: '50%', transform: 'translateY(-50%)' }}
             onClick={handleConnectionPoint('left')}
             title="Connect from left"
@@ -168,10 +184,11 @@ export function Node({
         </>
       )}
 
-      {/* Node content */}
-      <div className={`w-full h-full flex items-center justify-center p-2 pointer-events-none ${
-        node.type === 'decision' ? 'transform -rotate-45' : ''
-      }`}>
+      <div
+        className={`w-full h-full flex items-center justify-center p-2 pointer-events-none ${
+          node.type === 'decision' ? 'transform -rotate-45' : ''
+        }`}
+      >
         {isEditing ? (
           <input
             ref={inputRef}
@@ -188,7 +205,6 @@ export function Node({
         )}
       </div>
 
-      {/* Delete button */}
       {isSelected && (
         <button
           onClick={(e) => {
@@ -196,10 +212,10 @@ export function Node({
             e.stopPropagation();
             onDelete();
           }}
-          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs transition-colors duration-200 z-40 shadow-md"
+          className="absolute -right-2 -top-2 z-40 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs text-white shadow-md transition-colors duration-200 hover:bg-rose-500"
           title="Delete node"
         >
-          ×
+          x
         </button>
       )}
     </div>
