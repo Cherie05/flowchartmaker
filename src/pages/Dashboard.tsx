@@ -1,42 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { flowchartService } from '../services/flowchartService';
-import { Plus, LogOut, Trash2, Copy, CreditCard as Edit, Loader, Layers, FileText, Clock } from 'lucide-react';
-
-interface FlowchartItem {
-  id: string;
-  name: string;
-  description: string | null;
-  nodes: any;
-  connections: any;
-  created_at: string;
-  updated_at: string;
-  is_public: boolean;
-}
+import {
+  ArrowRight,
+  Clock3,
+  Copy,
+  FileText,
+  HardDrive,
+  Layers3,
+  Loader,
+  PencilLine,
+  Plus,
+  Sparkles,
+  Trash2
+} from 'lucide-react';
+import { getErrorMessage } from '../lib/errors';
+import type { FlowChartRecord } from '../types/flowChart';
 
 export function Dashboard() {
-  const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [flowcharts, setFlowcharts] = useState<FlowchartItem[]>([]);
+  const [flowcharts, setFlowcharts] = useState<FlowChartRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadFlowcharts();
-  }, []);
-
-  const loadFlowcharts = async () => {
+  const loadFlowcharts = useCallback(async () => {
     try {
       setLoading(true);
+      setError('');
       const data = await flowchartService.getAllFlowcharts();
-      setFlowcharts(data || []);
-    } catch (err: any) {
-      setError(err.message);
+      setFlowcharts(data);
+    } catch (error) {
+      setError(getErrorMessage(error, 'Failed to load flowcharts.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadFlowcharts();
+  }, [loadFlowcharts]);
 
   const handleCreate = async () => {
     try {
@@ -46,8 +48,8 @@ export function Dashboard() {
         connections: []
       });
       navigate(`/editor/${newFlowchart.id}`);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error) {
+      setError(getErrorMessage(error, 'Failed to create a new flowchart.'));
     }
   };
 
@@ -56,27 +58,18 @@ export function Dashboard() {
 
     try {
       await flowchartService.deleteFlowchart(id);
-      setFlowcharts(flowcharts.filter(f => f.id !== id));
-    } catch (err: any) {
-      setError(err.message);
+      setFlowcharts(currentFlowcharts => currentFlowcharts.filter(flowchart => flowchart.id !== id));
+    } catch (error) {
+      setError(getErrorMessage(error, 'Failed to delete the flowchart.'));
     }
   };
 
   const handleDuplicate = async (id: string) => {
     try {
       const duplicated = await flowchartService.duplicateFlowchart(id);
-      setFlowcharts([duplicated, ...flowcharts]);
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      navigate('/auth');
-    } catch (err: any) {
-      setError(err.message);
+      setFlowcharts(currentFlowcharts => [duplicated, ...currentFlowcharts]);
+    } catch (error) {
+      setError(getErrorMessage(error, 'Failed to duplicate the flowchart.'));
     }
   };
 
@@ -96,126 +89,212 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 rounded-lg p-2">
-                <Layers className="h-6 w-6 text-white" />
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,190,118,0.2),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(125,173,255,0.18),transparent_24%),linear-gradient(180deg,#f9f6ef_0%,#f4f1e8_100%)]">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <section className="rounded-[36px] border border-white/80 bg-white/82 p-6 shadow-[0_30px_110px_-60px_rgba(15,23,42,0.45)] backdrop-blur-xl sm:p-8">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                <span className="rounded-full bg-orange-100 px-3 py-1 text-orange-900">Whimsical-inspired</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Board-first UX</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Local mode</span>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">FlowChart Maker</h1>
-                <p className="text-sm text-gray-600">{user?.email}</p>
+
+              <div className="flex items-start gap-4">
+                <div className="hidden h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-900/15 sm:flex">
+                  <Layers3 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h1 className="text-4xl leading-tight text-slate-900 sm:text-5xl">
+                    Map ideas in a calmer, canvas-first workspace.
+                  </h1>
+                  <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+                    Build flows from scratch or let AI draft the first pass, then refine everything in a cleaner board experience inspired by Whimsical.
+                  </p>
+                </div>
               </div>
             </div>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">My Flowcharts</h2>
-            <p className="text-gray-600 mt-1">
-              {flowcharts.length} {flowcharts.length === 1 ? 'flowchart' : 'flowcharts'}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="inline-flex items-center gap-2 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm">
+                <HardDrive className="h-4 w-4 text-slate-500" />
+                Saved in this browser
+              </div>
+              <button
+                onClick={handleCreate}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800"
+              >
+                <Plus className="h-4 w-4" />
+                New board
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-3">
+            <StatCard
+              icon={Layers3}
+              label="Boards"
+              value={`${flowcharts.length}`}
+              detail={flowcharts.length === 1 ? 'One saved workspace' : 'Saved workspaces ready'}
+            />
+            <StatCard
+              icon={Sparkles}
+              label="Start faster"
+              value="AI drafts"
+              detail="Generate a first version, then refine on the canvas."
+            />
+            <StatCard
+              icon={HardDrive}
+              label="Storage"
+              value="Local"
+              detail="Your boards stay in browser storage on this device."
+            />
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Workspace boards</p>
+              <h2 className="mt-2 text-3xl text-slate-900">Pick up where you left off</h2>
+            </div>
+            <p className="text-sm text-slate-600">
+              {flowcharts.length} {flowcharts.length === 1 ? 'board' : 'boards'} available
             </p>
           </div>
-          <button
-            onClick={handleCreate}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200 shadow-lg"
-          >
-            <Plus className="h-5 w-5" />
-            New Flowchart
-          </button>
-        </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader className="h-8 w-8 text-blue-600 animate-spin" />
-          </div>
-        ) : flowcharts.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full mb-4">
-              <FileText className="h-10 w-10 text-gray-400" />
+          {error && (
+            <div className="mb-5 rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+              {error}
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No flowcharts yet</h3>
-            <p className="text-gray-600 mb-6">Create your first flowchart to get started</p>
-            <button
-              onClick={handleCreate}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
-            >
-              <Plus className="h-5 w-5" />
-              Create Flowchart
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {flowcharts.map((flowchart) => (
-              <div
-                key={flowchart.id}
-                className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group"
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center rounded-[32px] border border-white/80 bg-white/80 px-6 py-24 shadow-[0_24px_90px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
+              <div className="flex items-center gap-4 rounded-[24px] border border-slate-200 bg-[#fbfbf8] px-5 py-4">
+                <Loader className="h-5 w-5 animate-spin text-orange-500" />
+                <span className="text-sm font-medium text-slate-700">Loading boards...</span>
+              </div>
+            </div>
+          ) : flowcharts.length === 0 ? (
+            <div className="rounded-[32px] border border-white/80 bg-white/82 px-6 py-16 text-center shadow-[0_24px_90px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl sm:px-10">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-orange-100 text-orange-600">
+                <FileText className="h-9 w-9" />
+              </div>
+              <h3 className="mt-6 text-3xl text-slate-900">No boards yet</h3>
+              <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
+                Create your first workspace to start mapping flows, decisions, and ideas in the new board experience.
+              </p>
+              <button
+                onClick={handleCreate}
+                className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800"
               >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
-                      {flowchart.name}
-                    </h3>
+                <Plus className="h-4 w-4" />
+                Create board
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {flowcharts.map((flowchart) => (
+                <article
+                  key={flowchart.id}
+                  className="group rounded-[30px] border border-white/80 bg-white/86 p-5 shadow-[0_24px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_30px_110px_-52px_rgba(15,23,42,0.48)]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+                        <Layers3 className="h-3.5 w-3.5" />
+                        {flowchart.nodes?.length || 0} nodes
+                      </div>
+                      <h3 className="mt-4 line-clamp-2 text-2xl leading-tight text-slate-900">
+                        {flowchart.name}
+                      </h3>
+                    </div>
+
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-                    <div className="flex items-center gap-1">
-                      <FileText className="h-4 w-4" />
-                      {flowchart.nodes?.length || 0} nodes
+                  <div className="mt-5 rounded-[24px] border border-slate-200 bg-[#fbfbf8] p-4">
+                    <div className="flex items-center justify-between text-sm text-slate-600">
+                      <span className="font-medium text-slate-900">Connections</span>
+                      <span>{flowchart.connections?.length || 0}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      {formatDate(flowchart.updated_at)}
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-orange-400 via-sky-400 to-emerald-400"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            18 + (flowchart.nodes?.length || 0) * 8 + (flowchart.connections?.length || 0) * 4
+                          )}%`
+                        }}
+                      />
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+                      <Clock3 className="h-4 w-4" />
+                      Updated {formatDate(flowchart.updated_at)}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="mt-5 flex items-center gap-2">
                     <button
                       onClick={() => navigate(`/editor/${flowchart.id}`)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
-                      <Edit className="h-4 w-4" />
-                      Open
+                      <PencilLine className="h-4 w-4" />
+                      Open board
                     </button>
                     <button
                       onClick={() => handleDuplicate(flowchart.id)}
-                      className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg transition-colors duration-200"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300"
                       title="Duplicate"
                     >
                       <Copy className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(flowchart.id)}
-                      className="flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-700 p-2 rounded-lg transition-colors duration-200"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 transition hover:-translate-y-0.5 hover:bg-rose-100"
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
+    </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  detail
+}: {
+  icon: typeof Layers3;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-[24px] border border-white/80 bg-[#fbfbf8] p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+        </div>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{detail}</p>
     </div>
   );
 }

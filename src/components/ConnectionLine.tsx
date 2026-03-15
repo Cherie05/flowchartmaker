@@ -1,5 +1,5 @@
-import React from 'react';
-import { Connection, FlowChartNode } from '../types/flowChart';
+import { useId } from 'react';
+import type { Connection, FlowChartNode } from '../types/flowChart';
 
 interface ConnectionLineProps {
   connection: Connection;
@@ -10,80 +10,77 @@ interface ConnectionLineProps {
   onDelete: () => void;
 }
 
-export function ConnectionLine({ 
-  connection, 
-  fromNode, 
-  toNode, 
+export function ConnectionLine({
+  connection,
+  fromNode,
+  toNode,
   isSelected,
   onSelect,
-  onDelete 
+  onDelete
 }: ConnectionLineProps) {
-  const getConnectionPoint = (node: FlowChartNode, side: 'top' | 'right' | 'bottom' | 'left') => {
-    const { x, y, width, height } = node.position ? 
-      { ...node.position, width: node.width, height: node.height } : 
-      { x: 0, y: 0, width: node.width, height: node.height };
+  const markerId = useId().replace(/:/g, '-');
+
+  const getConnectionPoint = (node: FlowChartNode, side: Connection['fromSide']) => {
+    const { x, y, width, height } = node.position
+      ? { ...node.position, width: node.width, height: node.height }
+      : { x: 0, y: 0, width: node.width, height: node.height };
 
     switch (side) {
-      case 'top': return { x: x + width / 2, y };
-      case 'right': return { x: x + width, y: y + height / 2 };
-      case 'bottom': return { x: x + width / 2, y: y + height };
-      case 'left': return { x, y: y + height / 2 };
-      default: return { x: x + width / 2, y: y + height };
+      case 'top':
+        return { x: x + width / 2, y };
+      case 'right':
+        return { x: x + width, y: y + height / 2 };
+      case 'bottom':
+        return { x: x + width / 2, y: y + height };
+      case 'left':
+        return { x, y: y + height / 2 };
+      default:
+        return { x: x + width / 2, y: y + height };
     }
   };
 
   const fromPoint = getConnectionPoint(fromNode, connection.fromSide);
   const toPoint = getConnectionPoint(toNode, connection.toSide);
-
-  // Calculate smooth curve path
   const dx = toPoint.x - fromPoint.x;
   const dy = toPoint.y - fromPoint.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
   const controlOffset = Math.min(distance / 3, 80);
 
   let path = '';
-  
-  // Create smooth curves based on connection direction
+
   if (connection.fromSide === 'bottom' && connection.toSide === 'top') {
-    path = `M ${fromPoint.x} ${fromPoint.y} 
-            C ${fromPoint.x} ${fromPoint.y + controlOffset} 
-              ${toPoint.x} ${toPoint.y - controlOffset} 
+    path = `M ${fromPoint.x} ${fromPoint.y}
+            C ${fromPoint.x} ${fromPoint.y + controlOffset}
+              ${toPoint.x} ${toPoint.y - controlOffset}
               ${toPoint.x} ${toPoint.y}`;
   } else if (connection.fromSide === 'right' && connection.toSide === 'left') {
-    path = `M ${fromPoint.x} ${fromPoint.y} 
-            C ${fromPoint.x + controlOffset} ${fromPoint.y} 
-              ${toPoint.x - controlOffset} ${toPoint.y} 
+    path = `M ${fromPoint.x} ${fromPoint.y}
+            C ${fromPoint.x + controlOffset} ${fromPoint.y}
+              ${toPoint.x - controlOffset} ${toPoint.y}
               ${toPoint.x} ${toPoint.y}`;
   } else if (connection.fromSide === 'left' && connection.toSide === 'right') {
-    path = `M ${fromPoint.x} ${fromPoint.y} 
-            C ${fromPoint.x - controlOffset} ${fromPoint.y} 
-              ${toPoint.x + controlOffset} ${toPoint.y} 
+    path = `M ${fromPoint.x} ${fromPoint.y}
+            C ${fromPoint.x - controlOffset} ${fromPoint.y}
+              ${toPoint.x + controlOffset} ${toPoint.y}
               ${toPoint.x} ${toPoint.y}`;
   } else {
-    // Default smooth curve
     const midX = (fromPoint.x + toPoint.x) / 2;
     const midY = (fromPoint.y + toPoint.y) / 2;
-    path = `M ${fromPoint.x} ${fromPoint.y} 
-            Q ${midX} ${midY} 
+    path = `M ${fromPoint.x} ${fromPoint.y}
+            Q ${midX} ${midY}
               ${toPoint.x} ${toPoint.y}`;
   }
 
-  // Calculate midpoint for label and delete button
   const midPoint = {
     x: (fromPoint.x + toPoint.x) / 2,
     y: (fromPoint.y + toPoint.y) / 2
   };
-
-  // Calculate arrow position (closer to target)
-  const arrowOffset = 0.85;
-  const arrowPoint = {
-    x: fromPoint.x + (toPoint.x - fromPoint.x) * arrowOffset,
-    y: fromPoint.y + (toPoint.y - fromPoint.y) * arrowOffset
-  };
+  const labelWidth = connection.label ? Math.max(58, connection.label.length * 6.5 + 24) : 0;
+  const lineColor = isSelected ? '#f97316' : '#94a3b8';
+  const labelBorder = isSelected ? '#fdba74' : '#e7e5e4';
 
   return (
     <g className="connection-group">
-      {/* Invisible thick line for easier clicking */}
       <path
         d={path}
         stroke="transparent"
@@ -95,21 +92,29 @@ export function ConnectionLine({
           onSelect();
         }}
       />
-      
-      {/* Visible connection path */}
+
       <path
         d={path}
-        stroke={isSelected ? '#3B82F6' : '#6B7280'}
-        strokeWidth={isSelected ? 3 : 2}
+        stroke="rgba(255,255,255,0.92)"
+        strokeWidth={isSelected ? 6 : 5}
         fill="none"
-        className="pointer-events-none transition-all duration-200"
-        markerEnd="url(#arrowhead)"
+        strokeLinecap="round"
+        className="pointer-events-none"
       />
-      
-      {/* Arrow marker */}
+
+      <path
+        d={path}
+        stroke={lineColor}
+        strokeWidth={isSelected ? 3 : 2.25}
+        fill="none"
+        strokeLinecap="round"
+        className="pointer-events-none transition-all duration-200"
+        markerEnd={`url(#${markerId})`}
+      />
+
       <defs>
         <marker
-          id="arrowhead"
+          id={markerId}
           markerWidth="10"
           markerHeight="7"
           refX="9"
@@ -117,46 +122,44 @@ export function ConnectionLine({
           orient="auto"
           markerUnits="strokeWidth"
         >
-          <polygon 
-            points="0 0, 10 3.5, 0 7" 
-            fill={isSelected ? '#3B82F6' : '#6B7280'}
+          <polygon
+            points="0 0, 10 3.5, 0 7"
+            fill={lineColor}
             className="transition-colors duration-200"
           />
         </marker>
       </defs>
 
-      {/* Connection label */}
       {connection.label && (
         <g>
           <rect
-            x={midPoint.x - 20}
+            x={midPoint.x - labelWidth / 2}
             y={midPoint.y - 10}
-            width="40"
+            width={labelWidth}
             height="20"
-            rx="4"
-            fill="white"
-            stroke="#E5E7EB"
+            rx="10"
+            fill="#fffaf0"
+            stroke={labelBorder}
             className="pointer-events-none"
           />
           <text
             x={midPoint.x}
             y={midPoint.y + 3}
             textAnchor="middle"
-            className="fill-gray-700 text-xs font-medium pointer-events-none"
+            className="fill-slate-700 text-xs font-medium pointer-events-none"
           >
             {connection.label}
           </text>
         </g>
       )}
 
-      {/* Delete button for selected connection */}
       {isSelected && (
         <g className="pointer-events-auto">
           <circle
             cx={midPoint.x}
             cy={midPoint.y}
             r="10"
-            className="fill-red-500 cursor-pointer hover:fill-red-600 transition-colors duration-200"
+            className="cursor-pointer fill-slate-900 transition-colors duration-200 hover:fill-rose-500"
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
@@ -168,7 +171,7 @@ export function ConnectionLine({
             textAnchor="middle"
             className="fill-white text-xs font-bold pointer-events-none"
           >
-            ×
+            x
           </text>
         </g>
       )}
