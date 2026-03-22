@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type WheelEvent as ReactWheelEvent
+} from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Circle,
@@ -14,7 +21,7 @@ import { EditorCanvasChrome } from '../components/editor/EditorCanvasChrome';
 import { EditorSidebar } from '../components/editor/EditorSidebar';
 import { EditorToolRail } from '../components/editor/EditorToolRail';
 import { EditorTopBar } from '../components/editor/EditorTopBar';
-import type { WorkspaceNodeType } from '../components/editor/types';
+import type { WorkspaceNodeType, WorkspaceTheme } from '../components/editor/types';
 import { useFlowChart } from '../hooks/useFlowChart';
 import { createId } from '../lib/createId';
 import { getErrorMessage } from '../lib/errors';
@@ -22,11 +29,14 @@ import { aiService } from '../services/aiService';
 import { flowchartService } from '../services/flowchartService';
 import type { AIFlowChartResponse, Connection, FlowChartNode, NodeSide, Position } from '../types/flowChart';
 
-const WORKSPACE_PADDING = 320;
-const WORKSPACE_SAFE_LEFT = 260;
-const WORKSPACE_SAFE_TOP = 180;
-const MIN_WORKSPACE_WIDTH = 2800;
-const MIN_WORKSPACE_HEIGHT = 2000;
+const WORKSPACE_PADDING = 520;
+const WORKSPACE_SAFE_LEFT = 420;
+const WORKSPACE_SAFE_TOP = 320;
+const MIN_WORKSPACE_WIDTH = 6400;
+const MIN_WORKSPACE_HEIGHT = 4200;
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 2.2;
+const WORKSPACE_THEME_STORAGE_KEY = 'flowchart-workspace-theme';
 
 export function Editor() {
   const { id } = useParams<{ id: string }>();
@@ -70,6 +80,15 @@ export function Editor() {
   const saveStatusTimeoutRef = useRef<number | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() => {
+    if (typeof window === 'undefined') {
+      return 'dark';
+    }
+
+    return window.localStorage.getItem(WORKSPACE_THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+  });
+  const zoomRef = useRef(zoom);
 
   const persistFlowchart = useCallback(async () => {
     if (!id) {
@@ -83,6 +102,35 @@ export function Editor() {
     });
   }, [flowChart.connections, flowChart.nodes, flowchartName, id]);
 
+  const applyZoom = useCallback((nextZoom: number, anchorPoint?: { clientX: number; clientY: number }) => {
+    const viewport = workspaceViewportRef.current;
+    const clampedZoom = clampZoom(nextZoom);
+
+    if (!viewport) {
+      setZoom(clampedZoom);
+      return;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    const anchorX = anchorPoint ? anchorPoint.clientX - rect.left : viewport.clientWidth / 2;
+    const anchorY = anchorPoint ? anchorPoint.clientY - rect.top : viewport.clientHeight / 2;
+    const workspaceX = (viewport.scrollLeft + anchorX) / zoomRef.current;
+    const workspaceY = (viewport.scrollTop + anchorY) / zoomRef.current;
+
+    setZoom(clampedZoom);
+
+    window.requestAnimationFrame(() => {
+      const currentViewport = workspaceViewportRef.current;
+
+      if (!currentViewport) {
+        return;
+      }
+
+      currentViewport.scrollLeft = Math.max(0, workspaceX * clampedZoom - anchorX);
+      currentViewport.scrollTop = Math.max(0, workspaceY * clampedZoom - anchorY);
+    });
+  }, []);
+
   const scheduleScrollToNodes = useCallback((nodes: FlowChartNode[]) => {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -93,19 +141,55 @@ export function Editor() {
         }
 
         if (!nodes.length) {
-          viewport.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+          const emptyMetrics = getWorkspaceMetrics([]);
+          setZoom(1);
+          viewport.scrollTo({
+            left: Math.max(0, emptyMetrics.width / 2 - viewport.clientWidth / 2),
+            top: Math.max(0, emptyMetrics.height / 2 - viewport.clientHeight / 2),
+            behavior: 'smooth'
+          });
           return;
         }
 
         const bounds = getNodeBounds(nodes);
-        viewport.scrollTo({
-          left: Math.max(0, bounds.minX - 180),
-          top: Math.max(0, bounds.minY - 140),
-          behavior: 'smooth'
+        const boundsWidth = bounds.maxX - bounds.minX + 320;
+        const boundsHeight = bounds.maxY - bounds.minY + 260;
+        const fitZoom = clampZoom(
+          Math.min(viewport.clientWidth / boundsWidth, viewport.clientHeight / boundsHeight, 1)
+        );
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+
+        setZoom(fitZoom);
+
+        window.requestAnimationFrame(() => {
+          const currentViewport = workspaceViewportRef.current;
+
+          if (!currentViewport) {
+            return;
+          }
+
+          currentViewport.scrollTo({
+            left: Math.max(0, centerX * fitZoom - currentViewport.clientWidth / 2),
+            top: Math.max(0, centerY * fitZoom - currentViewport.clientHeight / 2),
+            behavior: 'smooth'
+          });
         });
       });
     });
   }, []);
+
+  const handleZoomIn = useCallback(() => {
+    applyZoom(zoomRef.current * 1.15);
+  }, [applyZoom]);
+
+  const handleZoomOut = useCallback(() => {
+    applyZoom(zoomRef.current / 1.15);
+  }, [applyZoom]);
+
+  const handleResetZoom = useCallback(() => {
+    applyZoom(1);
+  }, [applyZoom]);
 
   const loadExistingFlowchart = useCallback(async () => {
     if (!id) {
@@ -181,6 +265,18 @@ export function Editor() {
   }, []);
 
   useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(WORKSPACE_THEME_STORAGE_KEY, workspaceTheme);
+  }, [workspaceTheme]);
+
+  useEffect(() => {
     if (selectedConnection && !flowChart.connections.some((connection) => connection.id === selectedConnection)) {
       setSelectedConnection(null);
     }
@@ -222,8 +318,8 @@ export function Editor() {
     if (e.target === e.currentTarget && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
       const position: Position = {
-        x: Math.max(0, e.clientX - rect.left - 70),
-        y: Math.max(0, e.clientY - rect.top - 40)
+        x: Math.max(0, (e.clientX - rect.left) / zoomRef.current - 70),
+        y: Math.max(0, (e.clientY - rect.top) / zoomRef.current - 40)
       };
 
       addNode('process', position);
@@ -336,8 +432,12 @@ export function Editor() {
     const viewport = workspaceViewportRef.current;
     const column = flowChart.nodes.length % 3;
     const row = Math.floor((flowChart.nodes.length % 6) / 3);
-    const viewportCenterX = viewport ? viewport.scrollLeft + viewport.clientWidth / 2 : 520;
-    const viewportCenterY = viewport ? viewport.scrollTop + viewport.clientHeight / 2 : 360;
+    const viewportCenterX = viewport
+      ? (viewport.scrollLeft + viewport.clientWidth / 2) / zoomRef.current
+      : 520;
+    const viewportCenterY = viewport
+      ? (viewport.scrollTop + viewport.clientHeight / 2) / zoomRef.current
+      : 360;
 
     return {
       x: Math.max(96, Math.round(viewportCenterX - 70 + (column - 1) * 190)),
@@ -417,6 +517,22 @@ export function Editor() {
     ? flowChart.nodes.find((node) => node.id === connectingFrom.nodeId)?.text || 'this node'
     : null;
   const workspaceMetrics = getWorkspaceMetrics(flowChart.nodes);
+  const zoomLabel = `${Math.round(zoom * 100)}%`;
+  const isDarkWorkspace = workspaceTheme === 'dark';
+  const gridPatternId = `workspace-grid-${workspaceTheme}`;
+  const shellClass = isDarkWorkspace ? 'bg-[#101114] text-slate-100' : 'bg-[#efe8dc] text-slate-900';
+  const mainClass = isDarkWorkspace ? 'bg-[#18191d]' : 'bg-[#ede7dc]';
+  const canvasShellClass = isDarkWorkspace ? 'bg-[#1a1b1f]' : 'bg-[#e8e0d2]';
+  const loadingShellClass = isDarkWorkspace
+    ? 'bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_26%),linear-gradient(180deg,#111318_0%,#16181d_100%)]'
+    : 'bg-[radial-gradient(circle_at_top_left,rgba(255,190,118,0.2),transparent_26%),linear-gradient(180deg,#f9f6ef_0%,#f4f1e8_100%)]';
+  const loadingCardClass = isDarkWorkspace
+    ? 'border-white/10 bg-[#1b1c20]/92 shadow-[0_24px_90px_-48px_rgba(0,0,0,0.6)]'
+    : 'border-white/80 bg-white/90 shadow-[0_24px_90px_-48px_rgba(15,23,42,0.42)]';
+  const workspaceBackground = isDarkWorkspace
+    ? 'radial-gradient(circle at 18% 18%, rgba(56,189,248,0.07), transparent 24%), radial-gradient(circle at 82% 14%, rgba(99,102,241,0.06), transparent 26%), radial-gradient(circle at 58% 82%, rgba(16,185,129,0.05), transparent 28%), linear-gradient(180deg, #1b1c20 0%, #15161a 100%)'
+    : 'radial-gradient(circle at 14% 16%, rgba(251,191,36,0.14), transparent 22%), radial-gradient(circle at 82% 18%, rgba(56,189,248,0.12), transparent 24%), radial-gradient(circle at 58% 80%, rgba(16,185,129,0.1), transparent 28%), linear-gradient(180deg, #f7f3ea 0%, #efe8db 100%)';
+  const workspaceGridStroke = isDarkWorkspace ? 'rgba(255, 255, 255, 0.045)' : 'rgba(148, 163, 184, 0.18)';
 
   const handleWorkspacePanStart = (e: ReactMouseEvent<HTMLDivElement>) => {
     const viewport = workspaceViewportRef.current;
@@ -450,6 +566,16 @@ export function Editor() {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleWorkspaceWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (!(e.ctrlKey || e.metaKey)) {
+      return;
+    }
+
+    e.preventDefault();
+    const nextZoom = e.deltaY > 0 ? zoomRef.current / 1.08 : zoomRef.current * 1.08;
+    applyZoom(nextZoom, { clientX: e.clientX, clientY: e.clientY });
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -467,6 +593,24 @@ export function Editor() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         handleManualSave();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && (event.key === '=' || event.key === '+')) {
+        event.preventDefault();
+        handleZoomIn();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === '-') {
+        event.preventDefault();
+        handleZoomOut();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === '0') {
+        event.preventDefault();
+        handleResetZoom();
         return;
       }
 
@@ -510,6 +654,9 @@ export function Editor() {
     deleteNode,
     focusAIComposer,
     handleManualSave,
+    handleResetZoom,
+    handleZoomIn,
+    handleZoomOut,
     selectedConnectionData,
     selectedNodeData,
     setSelectedNode
@@ -538,14 +685,20 @@ export function Editor() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(255,190,118,0.2),transparent_26%),linear-gradient(180deg,#f9f6ef_0%,#f4f1e8_100%)] px-6">
-        <div className="flex items-center gap-4 rounded-[28px] border border-white/80 bg-white/90 px-6 py-5 shadow-[0_24px_90px_-48px_rgba(15,23,42,0.42)] backdrop-blur-xl">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
+      <div className={`flex min-h-screen items-center justify-center px-6 ${loadingShellClass}`}>
+        <div className={`flex items-center gap-4 rounded-[28px] border px-6 py-5 backdrop-blur-xl ${loadingCardClass}`}>
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+              isDarkWorkspace ? 'bg-sky-500/10 text-sky-300' : 'bg-orange-100 text-orange-600'
+            }`}
+          >
             <Loader className="h-5 w-5 animate-spin" />
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Preparing workspace</p>
-            <p className="mt-1 text-base font-medium text-slate-900">Loading your board and recent changes...</p>
+            <p className={`mt-1 text-base font-medium ${isDarkWorkspace ? 'text-slate-100' : 'text-slate-900'}`}>
+              Loading your board and recent changes...
+            </p>
           </div>
         </div>
       </div>
@@ -553,18 +706,19 @@ export function Editor() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(255,190,118,0.18),transparent_26%),radial-gradient(circle_at_78%_0%,rgba(125,173,255,0.16),transparent_22%),linear-gradient(180deg,#f9f6ef_0%,#f4f1e8_100%)] text-slate-900">
-      <div className="flex h-full min-h-0 flex-col gap-4 p-3 sm:p-4 xl:flex-row xl:items-stretch xl:gap-5 xl:p-5">
+    <div className={`h-screen overflow-hidden ${shellClass}`}>
+      <div className="flex h-full min-h-0 flex-col xl:flex-row">
         <EditorToolRail
           nodeTypes={nodeTypes}
           addNodeFromPalette={addNodeFromPalette}
           onFocusAI={focusAIComposer}
           onImport={() => fileInputRef.current?.click()}
           onExportJson={() => handleExport('json')}
+          workspaceTheme={workspaceTheme}
         />
 
-        <main className="min-h-0 min-w-0 flex-1">
-          <div className="flex h-full min-w-0 flex-col gap-4">
+        <main className={`min-h-0 min-w-0 flex-1 ${mainClass}`}>
+          <div className="flex h-full min-w-0 flex-col">
             <EditorTopBar
               flowchartName={flowchartName}
               onNameChange={setFlowchartName}
@@ -579,87 +733,132 @@ export function Editor() {
               nodeCount={flowChart.nodes.length}
               connectionCount={flowChart.connections.length}
               isLinking={connectingFrom !== null}
+              workspaceTheme={workspaceTheme}
+              onThemeChange={setWorkspaceTheme}
             />
 
-            <div className="relative min-h-[560px] flex-1 overflow-hidden rounded-[32px] border border-white/80 bg-[#f6f3eb]/88 shadow-[0_28px_110px_-56px_rgba(15,23,42,0.46)] backdrop-blur-xl">
+            <div className={`relative min-h-[560px] flex-1 overflow-hidden ${canvasShellClass}`}>
+              <EditorCanvasChrome
+                hasNodes={flowChart.nodes.length > 0}
+                connectingNodeLabel={connectingNodeLabel}
+                zoomLabel={zoomLabel}
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                onResetZoom={handleResetZoom}
+                onFitCanvas={() => scheduleScrollToNodes(flowChart.nodes)}
+                workspaceTheme={workspaceTheme}
+              />
+
               <div
                 ref={workspaceViewportRef}
-                className={`h-full w-full overflow-auto rounded-[32px] ${
+                className={`h-full w-full overflow-auto ${
                   isPanning ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab' : 'cursor-default'
                 }`}
                 onMouseDown={handleWorkspacePanStart}
+                onWheel={handleWorkspaceWheel}
               >
                 <div
-                  ref={canvasRef}
-                  id="flowchart-canvas"
                   className="relative"
                   style={{
-                    width: `${workspaceMetrics.width}px`,
-                    height: `${workspaceMetrics.height}px`
+                    width: `${workspaceMetrics.width * zoom}px`,
+                    height: `${workspaceMetrics.height * zoom}px`
                   }}
-                  onClick={handleCanvasClick}
-                  onDoubleClick={handleCanvasDoubleClick}
                 >
-                  <EditorCanvasChrome
-                    hasNodes={flowChart.nodes.length > 0}
-                    connectingNodeLabel={connectingNodeLabel}
-                  />
-
-                  <svg
-                    className="absolute inset-0"
+                  <div
+                    ref={canvasRef}
+                    id="flowchart-canvas"
+                    className="absolute left-0 top-0 origin-top-left"
                     style={{
-                      zIndex: 5,
                       width: `${workspaceMetrics.width}px`,
-                      height: `${workspaceMetrics.height}px`
+                      height: `${workspaceMetrics.height}px`,
+                      transform: `scale(${zoom})`
                     }}
+                    onClick={handleCanvasClick}
+                    onDoubleClick={handleCanvasDoubleClick}
                   >
-                    {flowChart.connections.map((connection) => {
-                      const fromNode = flowChart.nodes.find((node) => node.id === connection.from);
-                      const toNode = flowChart.nodes.find((node) => node.id === connection.to);
+                    <div
+                      className="pointer-events-none absolute inset-0"
+                      style={{ backgroundImage: workspaceBackground }}
+                    />
 
-                      if (!fromNode || !toNode) {
-                        return null;
-                      }
+                    <div className="absolute inset-0 pointer-events-none opacity-70">
+                      <svg
+                        width={workspaceMetrics.width}
+                        height={workspaceMetrics.height}
+                        className="absolute inset-0"
+                      >
+                        <defs>
+                          <pattern id={gridPatternId} width="24" height="24" patternUnits="userSpaceOnUse">
+                            <path
+                              d="M 24 0 L 0 0 0 24"
+                              fill="none"
+                              stroke={workspaceGridStroke}
+                              strokeWidth="1"
+                            />
+                          </pattern>
+                        </defs>
+                        <rect width={workspaceMetrics.width} height={workspaceMetrics.height} fill={`url(#${gridPatternId})`} />
+                      </svg>
+                    </div>
 
-                      return (
-                        <ConnectionLine
-                          key={connection.id}
-                          connection={connection}
-                          fromNode={fromNode}
-                          toNode={toNode}
-                          isSelected={selectedConnection === connection.id}
+                    <svg
+                      className="absolute inset-0"
+                      style={{
+                        zIndex: 5,
+                        width: `${workspaceMetrics.width}px`,
+                        height: `${workspaceMetrics.height}px`
+                      }}
+                    >
+                      {flowChart.connections.map((connection) => {
+                        const fromNode = flowChart.nodes.find((node) => node.id === connection.from);
+                        const toNode = flowChart.nodes.find((node) => node.id === connection.to);
+
+                        if (!fromNode || !toNode) {
+                          return null;
+                        }
+
+                        return (
+                          <ConnectionLine
+                            key={connection.id}
+                            connection={connection}
+                            fromNode={fromNode}
+                            toNode={toNode}
+                            isSelected={selectedConnection === connection.id}
+                            onSelect={() => {
+                              setSelectedConnection(connection.id);
+                              setSelectedNode(null);
+                            }}
+                            onDelete={() => {
+                              deleteConnection(connection.id);
+                              setSelectedConnection(null);
+                            }}
+                            workspaceTheme={workspaceTheme}
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    <div className="pointer-events-none absolute inset-0" style={{ zIndex: 10 }}>
+                      {flowChart.nodes.map((node) => (
+                        <Node
+                          key={node.id}
+                          node={node}
+                          isSelected={selectedNode === node.id}
+                          isDragging={draggedNode === node.id}
+                          zoom={zoom}
                           onSelect={() => {
-                            setSelectedConnection(connection.id);
-                            setSelectedNode(null);
-                          }}
-                          onDelete={() => {
-                            deleteConnection(connection.id);
+                            setSelectedNode(node.id);
                             setSelectedConnection(null);
                           }}
+                          onDragStart={() => startDrag(node.id)}
+                          onDragEnd={endDrag}
+                          onMove={(position) => moveNode(node.id, position)}
+                          onTextChange={(text) => updateNode(node.id, { text })}
+                          onDelete={() => deleteNode(node.id)}
+                          onConnect={handleNodeConnect}
                         />
-                      );
-                    })}
-                  </svg>
-
-                  <div className="pointer-events-none absolute inset-0" style={{ zIndex: 10 }}>
-                    {flowChart.nodes.map((node) => (
-                      <Node
-                        key={node.id}
-                        node={node}
-                        isSelected={selectedNode === node.id}
-                        isDragging={draggedNode === node.id}
-                        onSelect={() => {
-                          setSelectedNode(node.id);
-                          setSelectedConnection(null);
-                        }}
-                        onDragStart={() => startDrag(node.id)}
-                        onDragEnd={endDrag}
-                        onMove={(position) => moveNode(node.id, position)}
-                        onTextChange={(text) => updateNode(node.id, { text })}
-                        onDelete={() => deleteNode(node.id)}
-                        onConnect={handleNodeConnect}
-                      />
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -705,6 +904,7 @@ export function Editor() {
           onExportPng={() => handleExport('png')}
           onExportSvg={() => handleExport('svg')}
           onClearBoard={handleClearAll}
+          workspaceTheme={workspaceTheme}
         />
       </div>
 
@@ -858,6 +1058,10 @@ function getNodeBounds(nodes: FlowChartNode[]): {
       maxY: 0
     }
   );
+}
+
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 }
 
 function normalizeImportedNode(

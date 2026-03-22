@@ -1,5 +1,5 @@
 import { Bot, FileJson, MousePointer2, Upload } from 'lucide-react';
-import type { WorkspaceNodeType } from './types';
+import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
 interface EditorToolRailProps {
   nodeTypes: WorkspaceNodeType[];
@@ -7,6 +7,7 @@ interface EditorToolRailProps {
   onFocusAI: () => void;
   onImport: () => void;
   onExportJson: () => void;
+  workspaceTheme: WorkspaceTheme;
 }
 
 export function EditorToolRail({
@@ -14,8 +15,10 @@ export function EditorToolRail({
   addNodeFromPalette,
   onFocusAI,
   onImport,
-  onExportJson
+  onExportJson,
+  workspaceTheme
 }: EditorToolRailProps) {
+  const isDark = workspaceTheme === 'dark';
   const compactLabels: Record<WorkspaceNodeType['type'], string> = {
     start: 'Start',
     process: 'Step',
@@ -25,22 +28,32 @@ export function EditorToolRail({
   };
 
   return (
-    <aside className="sticky top-5 hidden w-[76px] shrink-0 xl:flex xl:flex-col xl:gap-3">
-      <div className="rounded-[28px] border border-white/80 bg-white/82 px-2 py-3 shadow-[0_22px_80px_-52px_rgba(15,23,42,0.45)] backdrop-blur-xl">
-        <div className="mb-3 flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-900/15">
+    <aside
+      className={`hidden h-full w-[92px] shrink-0 border-r xl:flex xl:flex-col ${
+        isDark ? 'border-white/8 bg-[#151517]' : 'border-slate-200/80 bg-[#f4efe6]'
+      }`}
+    >
+      <div className="flex h-full flex-col px-3 py-4">
+        <div className="mb-4 flex flex-col items-center gap-3">
+          <div
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-lg ${
+              isDark
+                ? 'border-white/10 bg-white/[0.04] text-slate-100 shadow-black/20'
+                : 'border-slate-200 bg-white/90 text-slate-700 shadow-[0_18px_40px_-28px_rgba(148,163,184,0.5)]'
+            }`}
+          >
             <MousePointer2 className="h-5 w-5" />
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Quick</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Tools</span>
         </div>
 
         <div className="flex w-full flex-col gap-2">
           <button
             onClick={onFocusAI}
-            className="flex flex-col items-center gap-1.5 rounded-2xl border border-orange-200 bg-orange-50 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-orange-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-orange-100"
+            className="flex flex-col items-center gap-1.5 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-orange-100 transition hover:border-orange-400/40 hover:bg-orange-500/15"
             title="Generate with AI"
           >
-            <Bot className="h-5 w-5 text-orange-500" />
+            <Bot className="h-5 w-5 text-orange-400" />
             AI
           </button>
 
@@ -48,7 +61,7 @@ export function EditorToolRail({
             <button
               key={type}
               onClick={() => addNodeFromPalette(type)}
-              className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-700 shadow-sm transition hover:-translate-y-0.5 ${surfaceClass}`}
+              className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-800 transition hover:-translate-y-0.5 ${surfaceClass}`}
               title={`Add ${label}`}
             >
               <Icon className={`h-5 w-5 ${iconColor}`} />
@@ -57,22 +70,30 @@ export function EditorToolRail({
           ))}
         </div>
 
-        <div className="mt-3 border-t border-slate-200/80 pt-3">
+        <div className={`mt-auto border-t pt-3 ${isDark ? 'border-white/8' : 'border-slate-200/80'}`}>
           <div className="flex w-full flex-col gap-2">
             <button
               onClick={onImport}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+              className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition hover:-translate-y-0.5 ${
+                isDark
+                  ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
+                  : 'border-slate-200 bg-white/90 text-slate-700 hover:border-slate-300 hover:bg-white'
+              }`}
               title="Import JSON"
             >
-              <Upload className="h-5 w-5 text-slate-600" />
+              <Upload className={`h-5 w-5 ${isDark ? 'text-slate-300' : 'text-slate-500'}`} />
               Load
             </button>
             <button
               onClick={onExportJson}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+              className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition hover:-translate-y-0.5 ${
+                isDark
+                  ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
+                  : 'border-slate-200 bg-white/90 text-slate-700 hover:border-slate-300 hover:bg-white'
+              }`}
               title="Export JSON"
             >
-              <FileJson className="h-5 w-5 text-slate-600" />
+              <FileJson className={`h-5 w-5 ${isDark ? 'text-slate-300' : 'text-slate-500'}`} />
               Save
             </button>
           </div>
