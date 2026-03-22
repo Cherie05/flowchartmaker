@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import type { WorkspaceTheme } from './editor/types';
 import type { Connection, FlowChartNode } from '../types/flowChart';
 
 interface ConnectionLineProps {
@@ -8,6 +9,7 @@ interface ConnectionLineProps {
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  workspaceTheme: WorkspaceTheme;
 }
 
 export function ConnectionLine({
@@ -16,8 +18,10 @@ export function ConnectionLine({
   toNode,
   isSelected,
   onSelect,
-  onDelete
+  onDelete,
+  workspaceTheme
 }: ConnectionLineProps) {
+  const isDark = workspaceTheme === 'dark';
   const markerId = useId().replace(/:/g, '-');
 
   const getConnectionPoint = (node: FlowChartNode, side: Connection['fromSide']) => {
@@ -76,8 +80,12 @@ export function ConnectionLine({
     y: (fromPoint.y + toPoint.y) / 2
   };
   const labelWidth = connection.label ? Math.max(58, connection.label.length * 6.5 + 24) : 0;
-  const lineColor = isSelected ? '#f97316' : '#94a3b8';
-  const labelBorder = isSelected ? '#fdba74' : '#e7e5e4';
+  const lineColor = isSelected ? '#38bdf8' : isDark ? '#cbd5e1' : '#64748b';
+  const underlayColor = isDark ? 'rgba(15,23,42,0.72)' : 'rgba(255,255,255,0.92)';
+  const labelFill = isDark ? '#16181d' : '#ffffff';
+  const labelBorder = isSelected ? 'rgba(56, 189, 248, 0.4)' : isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(148, 163, 184, 0.35)';
+  const labelTextClass = isDark ? 'fill-slate-200' : 'fill-slate-700';
+  const deleteFillClass = isDark ? 'fill-slate-900' : 'fill-slate-700';
 
   return (
     <g className="connection-group">
@@ -95,7 +103,7 @@ export function ConnectionLine({
 
       <path
         d={path}
-        stroke="rgba(255,255,255,0.92)"
+        stroke={underlayColor}
         strokeWidth={isSelected ? 6 : 5}
         fill="none"
         strokeLinecap="round"
@@ -138,7 +146,7 @@ export function ConnectionLine({
             width={labelWidth}
             height="20"
             rx="10"
-            fill="#fffaf0"
+            fill={labelFill}
             stroke={labelBorder}
             className="pointer-events-none"
           />
@@ -146,7 +154,7 @@ export function ConnectionLine({
             x={midPoint.x}
             y={midPoint.y + 3}
             textAnchor="middle"
-            className="fill-slate-700 text-xs font-medium pointer-events-none"
+            className={`${labelTextClass} text-xs font-medium pointer-events-none`}
           >
             {connection.label}
           </text>
@@ -159,7 +167,7 @@ export function ConnectionLine({
             cx={midPoint.x}
             cy={midPoint.y}
             r="10"
-            className="cursor-pointer fill-slate-900 transition-colors duration-200 hover:fill-rose-500"
+            className={`cursor-pointer transition-colors duration-200 hover:fill-rose-500 ${deleteFillClass}`}
             onClick={(e) => {
               e.stopPropagation();
               onDelete();

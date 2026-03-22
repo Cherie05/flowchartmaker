@@ -11,6 +11,7 @@ interface NodeProps {
   node: FlowChartNode;
   isSelected: boolean;
   isDragging: boolean;
+  zoom: number;
   onSelect: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -24,6 +25,7 @@ export function Node({
   node,
   isSelected,
   isDragging,
+  zoom,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -62,8 +64,8 @@ export function Node({
     const startNodeY = node.position.y;
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaY = moveEvent.clientY - startY;
+      const deltaX = (moveEvent.clientX - startX) / zoom;
+      const deltaY = (moveEvent.clientY - startY) / zoom;
 
       onMove({
         x: Math.max(0, startNodeX + deltaX),
@@ -118,7 +120,7 @@ export function Node({
       'absolute pointer-events-auto select-none border text-sm font-medium',
       'flex items-center justify-center transition-[transform,box-shadow,border-color,opacity] duration-200',
       isSelected
-        ? 'border-orange-300 ring-4 ring-orange-100 shadow-[0_20px_55px_-24px_rgba(249,115,22,0.34)]'
+        ? 'border-sky-400 ring-4 ring-sky-400/15 shadow-[0_20px_55px_-24px_rgba(56,189,248,0.32)]'
         : 'shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)] hover:-translate-y-0.5',
       isDragging ? 'z-50 opacity-80 cursor-grabbing' : 'z-10 cursor-grab'
     ].join(' ');
@@ -158,25 +160,25 @@ export function Node({
       {(isSelected || isDragging) && (
         <>
           <div
-            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-slate-900 bg-slate-100 shadow-md shadow-black/20 transition-colors duration-200 hover:bg-sky-400"
             style={{ top: -8, left: '50%', transform: 'translateX(-50%)' }}
             onClick={handleConnectionPoint('top')}
             title="Connect from top"
           />
           <div
-            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-slate-900 bg-slate-100 shadow-md shadow-black/20 transition-colors duration-200 hover:bg-sky-400"
             style={{ right: -8, top: '50%', transform: 'translateY(-50%)' }}
             onClick={handleConnectionPoint('right')}
             title="Connect from right"
           />
           <div
-            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-slate-900 bg-slate-100 shadow-md shadow-black/20 transition-colors duration-200 hover:bg-sky-400"
             style={{ bottom: -8, left: '50%', transform: 'translateX(-50%)' }}
             onClick={handleConnectionPoint('bottom')}
             title="Connect from bottom"
           />
           <div
-            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-900 shadow-md shadow-slate-900/20 transition-colors duration-200 hover:bg-orange-500"
+            className="connection-point absolute z-30 h-3.5 w-3.5 rounded-full border-2 border-slate-900 bg-slate-100 shadow-md shadow-black/20 transition-colors duration-200 hover:bg-sky-400"
             style={{ left: -8, top: '50%', transform: 'translateY(-50%)' }}
             onClick={handleConnectionPoint('left')}
             title="Connect from left"
