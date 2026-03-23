@@ -1,4 +1,19 @@
 export type NodeSide = 'top' | 'right' | 'bottom' | 'left';
+export type FlowChartNodeType =
+  | 'start'
+  | 'process'
+  | 'decision'
+  | 'end'
+  | 'connector'
+  | 'input'
+  | 'manualInput'
+  | 'manualOperation'
+  | 'triangle'
+  | 'hexagon'
+  | 'database'
+  | 'annotation';
+export type ConnectionType = 'curved' | 'straight' | 'elbow';
+export type ConnectionMarker = 'none' | 'arrow';
 
 export interface Position {
   x: number;
@@ -10,11 +25,16 @@ export interface FlowChartNodeStyle {
   borderColor?: string;
   color?: string;
   textColor?: string;
+  borderStyle?: 'solid' | 'dashed' | 'none';
+  opacity?: number;
+  fontSize?: number;
+  fontWeight?: 'normal' | 'bold';
+  textAlign?: 'left' | 'center' | 'right';
 }
 
 export interface FlowChartNode {
   id: string;
-  type: 'start' | 'process' | 'decision' | 'end' | 'connector';
+  type: FlowChartNodeType;
   position: Position;
   text: string;
   width: number;
@@ -29,6 +49,10 @@ export interface Connection {
   fromSide: NodeSide;
   toSide: NodeSide;
   label?: string;
+  type?: ConnectionType;
+  startMarker?: ConnectionMarker;
+  endMarker?: ConnectionMarker;
+  color?: string;
 }
 
 export interface FlowChart {
