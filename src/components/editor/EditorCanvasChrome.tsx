@@ -29,9 +29,10 @@ export function EditorCanvasChrome({
     <>
       <div className="pointer-events-none absolute left-5 top-5 z-30 flex flex-wrap items-center gap-2 md:left-6 md:top-6">
         <CanvasPill icon={MousePointer2} label="Double-click to add" theme={workspaceTheme} />
+        <CanvasPill icon={MousePointer2} label="Drag empty space to multi-select" theme={workspaceTheme} />
         <CanvasPill icon={Move} label="Space-drag or middle mouse to pan" theme={workspaceTheme} />
         <CanvasPill icon={Keyboard} label="Ctrl/Cmd + wheel to zoom" theme={workspaceTheme} />
-        <CanvasPill icon={Bot} label="Use AI prompts on the right" theme={workspaceTheme} />
+        <CanvasPill icon={Bot} label="Alt-drag from a node to connect" theme={workspaceTheme} />
       </div>
 
       {connectingNodeLabel && (
@@ -92,12 +93,12 @@ export function EditorCanvasChrome({
               />
               <EmptyStateStep
                 title="Add steps fast"
-                description="Double-click the canvas or use the quick-add rail for common shapes."
+                description="Double-click the canvas or use the quick-add rail and shape library for common blocks."
                 theme={workspaceTheme}
               />
               <EmptyStateStep
                 title="Navigate freely"
-                description="Scroll, pan, and zoom across a much larger board without cutoffs."
+                description="Scroll, pan, zoom, and use the minimap across a much larger board without cutoffs."
                 theme={workspaceTheme}
               />
             </div>
@@ -111,7 +112,7 @@ export function EditorCanvasChrome({
               >
                 /
               </span>{' '}
-              to focus the AI composer.
+              for the command menu.
             </p>
           </div>
         </div>

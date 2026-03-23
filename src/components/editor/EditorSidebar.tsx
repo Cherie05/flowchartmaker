@@ -1,6 +1,6 @@
 import type { Ref } from 'react';
 import { Bot, Circle, Download, FileJson, Keyboard, Loader, MousePointer2, Square, Trash2, Upload } from 'lucide-react';
-import type { Connection, FlowChartNode } from '../../types/flowChart';
+import type { Connection, ConnectionMarker, ConnectionType, FlowChartNode } from '../../types/flowChart';
 import { SelectionMetric, ShortcutRow } from './WorkspaceBits';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
@@ -16,18 +16,27 @@ interface EditorSidebarProps {
   nodeTypes: WorkspaceNodeType[];
   addNodeFromPalette: (type: WorkspaceNodeType['type']) => void;
   selectedNodeData: FlowChartNode | null;
+  selectedNodeCount: number;
   selectedConnectionData: Connection | null;
   selectedConnectionEndpoints: {
     from: FlowChartNode | null;
     to: FlowChartNode | null;
   } | null;
   updateNodeText: (text: string) => void;
+  updateNodeType: (type: FlowChartNode['type']) => void;
+  updateNodeStyle: (style: Partial<NonNullable<FlowChartNode['style']>>) => void;
   onDeleteSelectedNode: () => void;
+  onDeleteSelectedNodes: () => void;
   onDeleteSelectedConnection: () => void;
+  updateConnectionLabel: (label: string) => void;
+  updateConnectionType: (type: ConnectionType) => void;
+  updateConnectionMarker: (side: 'startMarker' | 'endMarker', marker: ConnectionMarker) => void;
+  updateConnectionColor: (color: string) => void;
   onImport: () => void;
   onExportJson: () => void;
   onExportPng: () => void;
   onExportSvg: () => void;
+  onExportPdf: () => void;
   onClearBoard: () => void;
   workspaceTheme: WorkspaceTheme;
 }
@@ -44,15 +53,24 @@ export function EditorSidebar({
   nodeTypes,
   addNodeFromPalette,
   selectedNodeData,
+  selectedNodeCount,
   selectedConnectionData,
   selectedConnectionEndpoints,
   updateNodeText,
+  updateNodeType,
+  updateNodeStyle,
   onDeleteSelectedNode,
+  onDeleteSelectedNodes,
   onDeleteSelectedConnection,
+  updateConnectionLabel,
+  updateConnectionType,
+  updateConnectionMarker,
+  updateConnectionColor,
   onImport,
   onExportJson,
   onExportPng,
   onExportSvg,
+  onExportPdf,
   onClearBoard,
   workspaceTheme
 }: EditorSidebarProps) {
@@ -170,7 +188,13 @@ export function EditorSidebar({
             <div>
               <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${sectionKickerClass}`}>Inspector</p>
               <h3 className={`mt-1 text-lg font-semibold ${sectionTitleClass}`}>
-                {selectedNodeData ? 'Edit selected node' : selectedConnectionData ? 'Selected connection' : 'Nothing selected'}
+                {selectedNodeData
+                  ? 'Edit selected node'
+                  : selectedNodeCount > 1
+                    ? 'Multi-selection'
+                    : selectedConnectionData
+                      ? 'Selected connection'
+                      : 'Nothing selected'}
               </h3>
             </div>
             <div className={`rounded-2xl p-2 ${iconShellClass}`}>
@@ -205,12 +229,96 @@ export function EditorSidebar({
                 <SelectionMetric label="Height" value={`${selectedNodeData.height}px`} theme={workspaceTheme} />
               </div>
 
+              <div className={`grid grid-cols-2 gap-3 rounded-[20px] border p-4 ${softCardClass}`}>
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Shape
+                  <select
+                    value={selectedNodeData.type}
+                    onChange={(e) => updateNodeType(e.target.value as FlowChartNode['type'])}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    {nodeTypes.map((nodeType) => (
+                      <option key={nodeType.type} value={nodeType.type}>
+                        {nodeType.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Border
+                  <select
+                    value={selectedNodeData.style?.borderStyle ?? 'solid'}
+                    onChange={(e) =>
+                      updateNodeStyle({ borderStyle: e.target.value as NonNullable<FlowChartNode['style']>['borderStyle'] })
+                    }
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="none">Hidden</option>
+                  </select>
+                </label>
+
+                <ColorField
+                  label="Fill"
+                  value={selectedNodeData.style?.backgroundColor ?? '#ffffff'}
+                  onChange={(value) => updateNodeStyle({ backgroundColor: value })}
+                  workspaceTheme={workspaceTheme}
+                />
+                <ColorField
+                  label="Border Color"
+                  value={selectedNodeData.style?.borderColor ?? '#cbd5e1'}
+                  onChange={(value) => updateNodeStyle({ borderColor: value })}
+                  workspaceTheme={workspaceTheme}
+                />
+                <ColorField
+                  label="Text Color"
+                  value={selectedNodeData.style?.textColor ?? '#0f172a'}
+                  onChange={(value) => updateNodeStyle({ textColor: value })}
+                  workspaceTheme={workspaceTheme}
+                />
+
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Font Size
+                  <input
+                    type="number"
+                    min={10}
+                    max={24}
+                    value={selectedNodeData.style?.fontSize ?? 12}
+                    onChange={(e) => updateNodeStyle({ fontSize: Number(e.target.value) || 12 })}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  />
+                </label>
+              </div>
+
               <button
                 onClick={onDeleteSelectedNode}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete selected node
+              </button>
+            </div>
+          ) : selectedNodeCount > 1 ? (
+            <div className="space-y-4">
+              <div className={`rounded-[20px] border p-4 text-sm ${softCardClass} ${softTextClass}`}>
+                <p className={`font-medium ${softStrongTextClass}`}>{selectedNodeCount} nodes selected</p>
+                <p className="mt-2">Drag to move them together, use arrow keys to nudge, or duplicate with `Ctrl/Cmd + D`.</p>
+              </div>
+
+              <button
+                onClick={onDeleteSelectedNodes}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete selection
               </button>
             </div>
           ) : selectedConnectionData ? (
@@ -225,6 +333,70 @@ export function EditorSidebar({
                 <p className={`mt-1 ${sectionCopyClass}`}>
                   {selectedConnectionData.label ? `Label: ${selectedConnectionData.label}` : 'No label on this connection.'}
                 </p>
+              </div>
+
+              <div className={`grid grid-cols-2 gap-3 rounded-[20px] border p-4 ${softCardClass}`}>
+                <label className={`col-span-2 text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Label
+                  <input
+                    value={selectedConnectionData.label ?? ''}
+                    onChange={(e) => updateConnectionLabel(e.target.value)}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                    placeholder="Label this connector"
+                  />
+                </label>
+
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Path
+                  <select
+                    value={selectedConnectionData.type ?? 'curved'}
+                    onChange={(e) => updateConnectionType(e.target.value as ConnectionType)}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    <option value="curved">Curved</option>
+                    <option value="straight">Straight</option>
+                    <option value="elbow">Elbow</option>
+                  </select>
+                </label>
+
+                <ColorField
+                  label="Stroke"
+                  value={selectedConnectionData.color ?? '#64748b'}
+                  onChange={updateConnectionColor}
+                  workspaceTheme={workspaceTheme}
+                />
+
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Start
+                  <select
+                    value={selectedConnectionData.startMarker ?? 'none'}
+                    onChange={(e) => updateConnectionMarker('startMarker', e.target.value as ConnectionMarker)}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    <option value="none">None</option>
+                    <option value="arrow">Arrow</option>
+                  </select>
+                </label>
+
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  End
+                  <select
+                    value={selectedConnectionData.endMarker ?? 'arrow'}
+                    onChange={(e) => updateConnectionMarker('endMarker', e.target.value as ConnectionMarker)}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    <option value="none">None</option>
+                    <option value="arrow">Arrow</option>
+                  </select>
+                </label>
               </div>
 
               <button
@@ -262,6 +434,7 @@ export function EditorSidebar({
             <ActionButton icon={Download} label="Export JSON" onClick={onExportJson} workspaceTheme={workspaceTheme} />
             <ActionButton icon={Download} label="Export PNG" onClick={onExportPng} workspaceTheme={workspaceTheme} />
             <ActionButton icon={Download} label="Export SVG" onClick={onExportSvg} workspaceTheme={workspaceTheme} />
+            <ActionButton icon={Download} label="Export PDF" onClick={onExportPdf} workspaceTheme={workspaceTheme} />
             <button
               onClick={onClearBoard}
               className="col-span-2 inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
@@ -285,15 +458,48 @@ export function EditorSidebar({
 
           <div className="space-y-3 text-sm">
             <ShortcutRow action="Double-click canvas" result="Add a process node quickly" theme={workspaceTheme} />
+            <ShortcutRow action="Drag empty canvas" result="Marquee-select multiple nodes" theme={workspaceTheme} />
             <ShortcutRow action="Double-click node" result="Rename it inline" theme={workspaceTheme} />
+            <ShortcutRow action="Alt + drag node" result="Pull out a connector to another block" theme={workspaceTheme} />
+            <ShortcutRow action="Cmd/Ctrl + C / V / D" result="Copy, paste, or duplicate selection" theme={workspaceTheme} />
             <ShortcutRow action="Ctrl/Cmd + wheel" result="Zoom the workspace like a canvas tool" theme={workspaceTheme} />
-            <ShortcutRow action="/" result="Jump to the AI composer" theme={workspaceTheme} />
+            <ShortcutRow action="Alt + Arrow key" result="Create a connected step from the selected node" theme={workspaceTheme} />
+            <ShortcutRow action="/" result="Open the command menu" theme={workspaceTheme} />
+            <ShortcutRow action="Cmd/Ctrl + K" result="Open the command menu from anywhere" theme={workspaceTheme} />
             <ShortcutRow action="Cmd/Ctrl + S" result="Save the current board" theme={workspaceTheme} />
             <ShortcutRow action="Esc" result="Clear selection or exit link mode" theme={workspaceTheme} />
           </div>
         </section>
       </div>
     </aside>
+  );
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+  workspaceTheme
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  workspaceTheme: WorkspaceTheme;
+}) {
+  const isDark = workspaceTheme === 'dark';
+
+  return (
+    <label className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+      {label}
+      <div
+        className={`mt-2 flex items-center gap-3 rounded-xl border px-3 py-2 ${
+          isDark ? 'border-white/10 bg-[#0f1116]' : 'border-slate-200 bg-white'
+        }`}
+      >
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-8 w-10 rounded border-0 bg-transparent p-0" />
+        <span className={`text-sm font-medium ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{value}</span>
+      </div>
+    </label>
   );
 }
 

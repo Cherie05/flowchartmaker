@@ -17,6 +17,7 @@ interface UseFlowChartReturn {
     toSide?: Connection['toSide']
   ) => void;
   deleteConnection: (connectionId: string) => void;
+  updateConnection: (connectionId: string, updates: Partial<Connection>) => void;
   startDrag: (nodeId: string) => void;
   endDrag: () => void;
   moveNode: (nodeId: string, position: Position) => void;
@@ -29,6 +30,11 @@ interface UseFlowChartReturn {
   loadFlowChart: (flowChart: FlowChart) => void;
   undo: () => void;
   redo: () => void;
+  transformFlowChart: (
+    updater: (flowChart: FlowChart) => FlowChart,
+    options?: { saveHistory?: boolean }
+  ) => void;
+  captureHistorySnapshot: () => void;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -65,6 +71,36 @@ export function useFlowChart(): UseFlowChartReturn {
     historyIndexRef.current = 0;
   }, []);
 
+  const captureHistorySnapshot = useCallback(() => {
+    const current = latestFlowChartRef.current;
+    const latestSnapshot = historyRef.current[historyIndexRef.current];
+
+    if (!latestSnapshot || !areFlowChartsEqual(current, latestSnapshot)) {
+      saveToHistory(current);
+    }
+  }, [saveToHistory]);
+
+  const transformFlowChart = useCallback((
+    updater: (flowChart: FlowChart) => FlowChart,
+    options?: { saveHistory?: boolean }
+  ) => {
+    setFlowChart((prev) => {
+      const updated = updater(prev);
+
+      if (updated === prev || areFlowChartsEqual(updated, prev)) {
+        return prev;
+      }
+
+      latestFlowChartRef.current = updated;
+
+      if (options?.saveHistory !== false) {
+        saveToHistory(updated);
+      }
+
+      return updated;
+    });
+  }, [saveToHistory]);
+
   const addNode = useCallback((type: FlowChartNode['type'], position: Position) => {
     const newNode: FlowChartNode = {
       id: createId('node'),
@@ -75,70 +111,54 @@ export function useFlowChart(): UseFlowChartReturn {
       height: getDefaultHeight(type)
     };
 
-    setFlowChart((prev) => {
-      const updated = {
-        ...prev,
-        nodes: [...prev.nodes, newNode],
-        updatedAt: new Date()
-      };
-
-      latestFlowChartRef.current = updated;
-      saveToHistory(updated);
-      return updated;
-    });
-  }, [saveToHistory]);
+    transformFlowChart((prev) => ({
+      ...prev,
+      nodes: [...prev.nodes, newNode],
+      updatedAt: new Date()
+    }));
+  }, [transformFlowChart]);
 
   const updateNode = useCallback((nodeId: string, updates: Partial<FlowChartNode>) => {
-    setFlowChart((prev) => {
+    transformFlowChart((prev) => {
       let didUpdate = false;
 
-      const updated = {
-        ...prev,
-        nodes: prev.nodes.map((node) => {
-          if (node.id !== nodeId) {
-            return node;
+      const nodes = prev.nodes.map((node) => {
+        if (node.id !== nodeId) {
+          return node;
+        }
+
+        didUpdate = true;
+
+        return {
+          ...node,
+          ...updates,
+          position: updates.position ? { ...updates.position } : node.position,
+          style: updates.style ? { ...node.style, ...updates.style } : node.style
+        };
+      });
+
+      return didUpdate
+        ? {
+            ...prev,
+            nodes,
+            updatedAt: new Date()
           }
-
-          didUpdate = true;
-
-          return {
-            ...node,
-            ...updates,
-            position: updates.position ? { ...updates.position } : node.position,
-            style: updates.style ? { ...node.style, ...updates.style } : node.style
-          };
-        }),
-        updatedAt: new Date()
-      };
-
-      if (!didUpdate) {
-        return prev;
-      }
-
-      latestFlowChartRef.current = updated;
-      saveToHistory(updated);
-      return updated;
+        : prev;
     });
-  }, [saveToHistory]);
+  }, [transformFlowChart]);
 
   const deleteNode = useCallback((nodeId: string) => {
-    setFlowChart((prev) => {
-      const updated = {
-        ...prev,
-        nodes: prev.nodes.filter((node) => node.id !== nodeId),
-        connections: prev.connections.filter((connection) => connection.from !== nodeId && connection.to !== nodeId),
-        updatedAt: new Date()
-      };
-
-      latestFlowChartRef.current = updated;
-      saveToHistory(updated);
-      return updated;
-    });
+    transformFlowChart((prev) => ({
+      ...prev,
+      nodes: prev.nodes.filter((node) => node.id !== nodeId),
+      connections: prev.connections.filter((connection) => connection.from !== nodeId && connection.to !== nodeId),
+      updatedAt: new Date()
+    }));
 
     if (selectedNode === nodeId) {
       setSelectedNode(null);
     }
-  }, [selectedNode, saveToHistory]);
+  }, [selectedNode, transformFlowChart]);
 
   const addConnection = useCallback((
     from: string,
@@ -146,7 +166,7 @@ export function useFlowChart(): UseFlowChartReturn {
     fromSide: Connection['fromSide'] = 'bottom',
     toSide: Connection['toSide'] = 'top'
   ) => {
-    setFlowChart((prev) => {
+    transformFlowChart((prev) => {
       const connectionExists = prev.connections.some(
         (connection) =>
           (connection.from === from && connection.to === to) ||
@@ -162,38 +182,60 @@ export function useFlowChart(): UseFlowChartReturn {
         from,
         to,
         fromSide,
-        toSide
+        toSide,
+        type: 'curved',
+        startMarker: 'none',
+        endMarker: 'arrow'
       };
 
-      const updated = {
+      return {
         ...prev,
         connections: [...prev.connections, newConnection],
         updatedAt: new Date()
       };
-
-      latestFlowChartRef.current = updated;
-      saveToHistory(updated);
-      return updated;
     });
-  }, [saveToHistory]);
+  }, [transformFlowChart]);
 
   const deleteConnection = useCallback((connectionId: string) => {
-    setFlowChart((prev) => {
+    transformFlowChart((prev) => {
       if (!prev.connections.some((connection) => connection.id === connectionId)) {
         return prev;
       }
 
-      const updated = {
+      return {
         ...prev,
         connections: prev.connections.filter((connection) => connection.id !== connectionId),
         updatedAt: new Date()
       };
-
-      latestFlowChartRef.current = updated;
-      saveToHistory(updated);
-      return updated;
     });
-  }, [saveToHistory]);
+  }, [transformFlowChart]);
+
+  const updateConnection = useCallback((connectionId: string, updates: Partial<Connection>) => {
+    transformFlowChart((prev) => {
+      let didUpdate = false;
+
+      const connections = prev.connections.map((connection) => {
+        if (connection.id !== connectionId) {
+          return connection;
+        }
+
+        didUpdate = true;
+
+        return {
+          ...connection,
+          ...updates
+        };
+      });
+
+      return didUpdate
+        ? {
+            ...prev,
+            connections,
+            updatedAt: new Date()
+          }
+        : prev;
+    });
+  }, [transformFlowChart]);
 
   const startDrag = useCallback((nodeId: string) => {
     const node = latestFlowChartRef.current.nodes.find((item) => item.id === nodeId);
@@ -252,45 +294,33 @@ export function useFlowChart(): UseFlowChartReturn {
   }, []);
 
   const clearAll = useCallback(() => {
-    setFlowChart((prev) => {
-      const clearedChart = {
-        ...prev,
-        nodes: [],
-        connections: [],
-        updatedAt: new Date()
-      };
-
-      latestFlowChartRef.current = clearedChart;
-      saveToHistory(clearedChart);
-      return clearedChart;
-    });
+    transformFlowChart((prev) => ({
+      ...prev,
+      nodes: [],
+      connections: [],
+      updatedAt: new Date()
+    }));
 
     setSelectedNode(null);
-  }, [saveToHistory]);
+  }, [transformFlowChart]);
 
   const replaceFlowChartContent = useCallback((content: {
     nodes: FlowChartNode[];
     connections: Connection[];
     name?: string;
   }) => {
-    setFlowChart((prev) => {
-      const updated = {
+    transformFlowChart((prev) => ({
         ...prev,
         name: content.name ?? prev.name,
         nodes: content.nodes.map(cloneNode),
         connections: content.connections.map(cloneConnection),
         updatedAt: new Date()
-      };
-
-      latestFlowChartRef.current = updated;
-      saveToHistory(updated);
-      return updated;
-    });
+      }));
 
     setSelectedNode(null);
     setDraggedNode(null);
     dragOriginRef.current = null;
-  }, [saveToHistory]);
+  }, [transformFlowChart]);
 
   const loadFlowChart = useCallback((newFlowChart: FlowChart) => {
     const normalizedFlowChart = cloneFlowChart(newFlowChart);
@@ -336,6 +366,7 @@ export function useFlowChart(): UseFlowChartReturn {
     deleteNode,
     addConnection,
     deleteConnection,
+    updateConnection,
     startDrag,
     endDrag,
     moveNode,
@@ -344,6 +375,8 @@ export function useFlowChart(): UseFlowChartReturn {
     loadFlowChart,
     undo,
     redo,
+    transformFlowChart,
+    captureHistorySnapshot,
     canUndo: historyIndexRef.current > 0,
     canRedo: historyIndexRef.current < historyRef.current.length - 1
   };
@@ -394,6 +427,20 @@ function getDefaultText(type: FlowChartNode['type']): string {
       return 'End';
     case 'connector':
       return 'Connector';
+    case 'input':
+      return 'Input / Output';
+    case 'manualInput':
+      return 'Manual Input';
+    case 'manualOperation':
+      return 'Manual Operation';
+    case 'triangle':
+      return 'Marker';
+    case 'hexagon':
+      return 'Preparation';
+    case 'database':
+      return 'Database';
+    case 'annotation':
+      return 'Annotation';
     default:
       return 'Node';
   }
@@ -408,6 +455,20 @@ function getDefaultWidth(type: FlowChartNode['type']): number {
       return 120;
     case 'connector':
       return 80;
+    case 'triangle':
+      return 110;
+    case 'hexagon':
+      return 150;
+    case 'database':
+      return 150;
+    case 'annotation':
+      return 180;
+    case 'manualInput':
+      return 150;
+    case 'manualOperation':
+      return 160;
+    case 'input':
+      return 160;
     default:
       return 140;
   }
@@ -419,7 +480,88 @@ function getDefaultHeight(type: FlowChartNode['type']): number {
     case 'end':
     case 'connector':
       return 60;
+    case 'triangle':
+      return 96;
+    case 'database':
+      return 96;
+    case 'annotation':
+      return 92;
     default:
       return 80;
   }
+}
+
+function areFlowChartsEqual(left: FlowChart, right: FlowChart): boolean {
+  if (
+    left.name !== right.name ||
+    left.nodes.length !== right.nodes.length ||
+    left.connections.length !== right.connections.length
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < left.nodes.length; index += 1) {
+    const current = left.nodes[index];
+    const previous = right.nodes[index];
+
+    if (
+      current.id !== previous.id ||
+      current.type !== previous.type ||
+      current.text !== previous.text ||
+      current.width !== previous.width ||
+      current.height !== previous.height ||
+      current.position.x !== previous.position.x ||
+      current.position.y !== previous.position.y ||
+      !areStylesEqual(current.style, previous.style)
+    ) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < left.connections.length; index += 1) {
+    const current = left.connections[index];
+    const previous = right.connections[index];
+
+    if (
+      current.id !== previous.id ||
+      current.from !== previous.from ||
+      current.to !== previous.to ||
+      current.fromSide !== previous.fromSide ||
+      current.toSide !== previous.toSide ||
+      current.label !== previous.label ||
+      current.type !== previous.type ||
+      current.startMarker !== previous.startMarker ||
+      current.endMarker !== previous.endMarker ||
+      current.color !== previous.color
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areStylesEqual(
+  left: FlowChartNode['style'] | undefined,
+  right: FlowChartNode['style'] | undefined
+): boolean {
+  if (!left && !right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.backgroundColor === right.backgroundColor &&
+    left.borderColor === right.borderColor &&
+    left.color === right.color &&
+    left.textColor === right.textColor &&
+    left.borderStyle === right.borderStyle &&
+    left.opacity === right.opacity &&
+    left.fontSize === right.fontSize &&
+    left.fontWeight === right.fontWeight &&
+    left.textAlign === right.textAlign
+  );
 }

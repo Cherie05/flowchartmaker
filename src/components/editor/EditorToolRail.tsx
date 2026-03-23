@@ -24,6 +24,13 @@ export function EditorToolRail({
     process: 'Step',
     decision: 'Branch',
     connector: 'Link',
+    input: 'Input',
+    manualInput: 'Manual',
+    manualOperation: 'Action',
+    triangle: 'Marker',
+    hexagon: 'Prep',
+    database: 'Data',
+    annotation: 'Note',
     end: 'End'
   };
 
