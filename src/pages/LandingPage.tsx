@@ -47,7 +47,7 @@ export function LandingPage() {
 
     setIsSubmitting(true);
     setSubmitError('');
-    
+
     try {
       const { error } = await supabase.from('waitlist').insert([{ name, email }]);
       if (error) throw error;
@@ -89,19 +89,19 @@ export function LandingPage() {
 
         {/* Minimalist Grid Background */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-20">
-           <div className="h-full w-full" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0)', backgroundSize: '40px 40px' }} />
+          <div className="h-full w-full" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0)', backgroundSize: '40px 40px' }} />
         </div>
 
         {/* Fixed Navigation */}
-        <motion.nav 
+        <motion.nav
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
           className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-8 md:px-16 w-full mix-blend-difference text-white"
         >
-          <Logo 
-            iconContainerClassName="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm" 
-            iconClassName="h-6 w-6 text-black" 
+          <Logo
+            iconContainerClassName="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm"
+            iconClassName="h-6 w-6 text-black"
             textClassName="text-2xl font-black tracking-tighter text-white"
           />
           <button
@@ -116,9 +116,9 @@ export function LandingPage() {
         {/* Hero Section */}
         <section className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 pt-32 pb-24 text-center md:px-12">
           <motion.div style={{ y: yText, opacity: opacityFade }} className="flex flex-col items-center w-full max-w-[90vw]">
-            
+
             <div className="overflow-hidden mb-12">
-              <motion.h1 
+              <motion.h1
                 className="text-[12vw] font-black tracking-tighter leading-[0.85] uppercase"
               >
                 {'Diagram at'.split(' ').map((word, i) => (
@@ -134,7 +134,7 @@ export function LandingPage() {
                     </motion.span>
                   </span>
                 ))}
-                <br/>
+                <br />
                 {'speed of thought'.split(' ').map((word, i) => (
                   <span key={`l2-${i}`} className="inline-block overflow-hidden pb-4">
                     <motion.span
@@ -151,7 +151,7 @@ export function LandingPage() {
               </motion.h1>
             </div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1, duration: 1.5 }}
@@ -177,60 +177,60 @@ export function LandingPage() {
         {/* Features Showcase */}
         <section className="relative z-20 bg-[#f7f3ea] py-32 md:py-48 border-t border-slate-300">
           <div className="max-w-[90vw] mx-auto">
-             <motion.div 
-                initial={{ opacity: 0, y: 100 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                className="mb-32 flex flex-col md:flex-row justify-between items-end gap-8"
-             >
-               <h2 className="text-6xl md:text-[8vw] font-black tracking-tighter leading-[0.9] uppercase">
-                  Intelligent<br/>
-                  <span className="text-slate-300">Invisible</span>
-               </h2>
-               <p className="text-xl text-slate-500 max-w-md pb-4 font-light">
-                 We removed the clutter so you can focus on the logic. The interface disappears when you don't need it.
-               </p>
-             </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+              className="mb-32 flex flex-col md:flex-row justify-between items-end gap-8"
+            >
+              <h2 className="text-6xl md:text-[8vw] font-black tracking-tighter leading-[0.9] uppercase">
+                Intelligent<br />
+                <span className="text-slate-300">Invisible</span>
+              </h2>
+              <p className="text-xl text-slate-500 max-w-md pb-4 font-light">
+                We removed the clutter so you can focus on the logic. The interface disappears when you don't need it.
+              </p>
+            </motion.div>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-200 border border-slate-200">
-                {[ 
-                  {
-                    title: "Board-First UX",
-                    desc: "Infinite canvas, magnetic connections, and instant layout. Built for speed and precision.",
-                    icon: <Layers className="h-6 w-6 text-slate-900" />,
-                    delay: 0.1
-                  },
-                  {
-                    title: "AI Generation",
-                    desc: "Describe your process. We build the skeleton. You refine the details in seconds.",
-                    icon: <Zap className="h-6 w-6 text-slate-900" />,
-                    delay: 0.2
-                  }
-                ].map((feature, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true, margin: "-50px" }}
-                    transition={{ duration: 0.8, delay: feature.delay }}
-                    className="group relative bg-white p-16 md:p-24 transition-colors hover:bg-[#efe8dc]"
-                  >
-                    <div className="mb-12 inline-flex rounded-full border border-slate-200 p-6">
-                      {feature.icon}
-                    </div>
-                    <h3 className="text-4xl font-bold tracking-tight mb-6">{feature.title}</h3>
-                    <p className="text-xl text-slate-500 font-light leading-relaxed">{feature.desc}</p>
-                  </motion.div>
-                ))}
-             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-200 border border-slate-200">
+              {[
+                {
+                  title: "Board-First UX",
+                  desc: "Infinite canvas, magnetic connections, and instant layout. Built for speed and precision.",
+                  icon: <Layers className="h-6 w-6 text-slate-900" />,
+                  delay: 0.1
+                },
+                {
+                  title: "AI Generation",
+                  desc: "Describe your process. We build the skeleton. You refine the details in seconds.",
+                  icon: <Zap className="h-6 w-6 text-slate-900" />,
+                  delay: 0.2
+                }
+              ].map((feature, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ duration: 0.8, delay: feature.delay }}
+                  className="group relative bg-white p-16 md:p-24 transition-colors hover:bg-[#efe8dc]"
+                >
+                  <div className="mb-12 inline-flex rounded-full border border-slate-200 p-6">
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-4xl font-bold tracking-tight mb-6">{feature.title}</h3>
+                  <p className="text-xl text-slate-500 font-light leading-relaxed">{feature.desc}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </section>
 
         {/* About Author Section */}
         <section className="relative z-10 w-full bg-white py-32 md:py-48 px-6 border-t border-slate-200">
           <div className="mx-auto max-w-5xl flex flex-col md:flex-row items-center gap-16">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: -50 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
@@ -248,11 +248,11 @@ export function LandingPage() {
               <p className="text-lg text-slate-500 leading-relaxed">
                 Expert in building dynamic web applications, offline-first mobile systems using React Native, and engineering AI products including local LLMs and scalable Next.js architectures.
               </p>
-              
+
               <div className="pt-6 flex flex-wrap gap-4">
-                <a 
-                  href="https://arunvpp.xyz" 
-                  target="_blank" 
+                <a
+                  href="https://arunvpp.xyz"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="group inline-flex items-center gap-3 rounded-full bg-slate-900 px-8 py-4 text-base font-bold text-white transition-all hover:bg-indigo-600"
                 >
@@ -261,8 +261,8 @@ export function LandingPage() {
                 </a>
               </div>
             </motion.div>
-            
-            <motion.div 
+
+            <motion.div
               initial={{ opacity: 0, x: 50 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
@@ -294,10 +294,10 @@ export function LandingPage() {
                 Whether you're looking to build something amazing together, contribute to open source, or support my work.
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {/* Contributions */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -8 }}
                 className="flex flex-col items-center text-center p-8 rounded-3xl bg-white border border-slate-200 shadow-sm transition-shadow hover:shadow-md"
               >
@@ -311,7 +311,7 @@ export function LandingPage() {
               </motion.div>
 
               {/* Projects */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -8 }}
                 className="flex flex-col items-center text-center p-8 rounded-3xl bg-white border border-slate-200 shadow-sm transition-shadow hover:shadow-md"
               >
@@ -325,7 +325,7 @@ export function LandingPage() {
               </motion.div>
 
               {/* Funding */}
-              <motion.div 
+              <motion.div
                 whileHover={{ y: -8 }}
                 className="flex flex-col items-center text-center p-8 rounded-3xl bg-white border border-slate-200 shadow-sm transition-shadow hover:shadow-md"
               >
@@ -340,9 +340,9 @@ export function LandingPage() {
             </div>
 
             <div className="mt-16 flex justify-center">
-              <a 
-                href="https://linkedin.com/in/arunvpp" 
-                target="_blank" 
+              <a
+                href="https://www.linkedin.com/in/arunvpp05/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="group inline-flex items-center gap-3 rounded-full bg-slate-900 px-8 py-4 text-base font-bold text-white transition-all hover:bg-indigo-600 hover:scale-105 shadow-md"
               >
@@ -355,13 +355,13 @@ export function LandingPage() {
 
         {/* Minimalist Footer / Waitlist */}
         <section className="relative z-10 w-full bg-[#e8e0d2] py-32 md:py-48 flex items-center justify-center border-t border-slate-300">
-           <motion.div 
-             initial={{ opacity: 0, y: 50 }}
-             whileInView={{ opacity: 1, y: 0 }}
-             viewport={{ once: true }}
-             transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-             className="w-full max-w-4xl px-6 flex flex-col items-center text-center"
-           >
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full max-w-4xl px-6 flex flex-col items-center text-center"
+          >
             <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase mb-12">
               Ready to flow.
             </h2>
@@ -370,7 +370,7 @@ export function LandingPage() {
             <div className="w-full max-w-xl">
               <AnimatePresence mode="wait">
                 {isSubmitted ? (
-                  <motion.div 
+                  <motion.div
                     key="success"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -380,10 +380,10 @@ export function LandingPage() {
                     <span className="text-2xl font-medium tracking-tight">You're on the list.</span>
                   </motion.div>
                 ) : (
-                  <motion.form 
+                  <motion.form
                     key="form"
                     exit={{ opacity: 0, y: -20 }}
-                    onSubmit={handleWaitlistSubmit} 
+                    onSubmit={handleWaitlistSubmit}
                     className="relative flex flex-col items-center gap-6"
                   >
                     <input
@@ -424,7 +424,7 @@ export function LandingPage() {
                 <button onClick={() => navigate('/privacy')} className="hover:text-slate-900 transition-colors">Privacy Policy</button>
               </div>
             </div>
-           </motion.div>
+          </motion.div>
         </section>
       </div>
     </ReactLenis>
