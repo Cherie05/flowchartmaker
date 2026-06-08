@@ -46,3 +46,28 @@ WITH CHECK (true);
 
 -- No SELECT policy is created. The public frontend CANNOT read analytics data.
 -- This prevents attackers from scraping your analytics.
+
+
+-- ==========================================
+-- Users Table (Try Tool sign-in)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.users (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- Clean up any existing policies with the same name before creating
+DROP POLICY IF EXISTS "Allow public insert to users" ON public.users;
+
+-- Security Policy: Anyone (public) can INSERT into users
+CREATE POLICY "Allow public insert to users"
+ON public.users FOR INSERT
+WITH CHECK (true);
+
+-- No SELECT policy is created. The public frontend CANNOT read user data.
+-- Only database admins can view user data from the Supabase dashboard.
