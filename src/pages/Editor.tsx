@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ConnectionLine } from '../components/ConnectionLine';
 import { Node } from '../components/Node';
+import { FeedbackModal } from '../components/FeedbackModal';
 import { EditorCanvasChrome } from '../components/editor/EditorCanvasChrome';
 import { CommandMenu, type CommandMenuItem } from '../components/editor/CommandMenu';
 import { ConnectorQuickAdd } from '../components/editor/ConnectorQuickAdd';
@@ -200,6 +201,25 @@ export function Editor() {
     return stored === 'dark' ? 'dark' : 'light';
   });
   const zoomRef = useRef(zoom);
+
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
+  // Show feedback popup after 1 minute of usage
+  useEffect(() => {
+    if (!id) return;
+    
+    const feedbackKey = `wizzleflow_feedback_${id}`;
+    const hasSeenFeedback = window.localStorage.getItem(feedbackKey);
+    
+    if (!hasSeenFeedback) {
+      const timer = setTimeout(() => {
+        setShowFeedbackModal(true);
+        window.localStorage.setItem(feedbackKey, 'true');
+      }, 60000); // 1 minute
+      
+      return () => clearTimeout(timer);
+    }
+  }, [id]);
 
   const persistFlowchart = useCallback(async () => {
     if (!id) {
@@ -2526,6 +2546,11 @@ export function Editor() {
 
   return (
     <div className={`h-screen overflow-hidden ${shellClass}`}>
+      <FeedbackModal 
+        isOpen={showFeedbackModal} 
+        onClose={() => setShowFeedbackModal(false)} 
+        flowchartId={id} 
+      />
       <div className="flex h-full min-h-0 flex-col xl:flex-row">
         {!isLeftRailCollapsed && !presentationMode && (
           <EditorToolRail
