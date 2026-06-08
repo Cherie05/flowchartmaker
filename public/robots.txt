@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /editor/
 
-Sitemap: https://wizzleflow.app/sitemap.xml
+Sitemap: https://wizzleflow.xyz/sitemap.xml
