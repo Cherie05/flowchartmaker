@@ -1,0 +1,43 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Code Quality (Lint)
+      run: npm run lint
+
+    - name: Type Checking
+      run: npx tsc --noEmit
+
+    - name: Build for Production
+      run: npm run build
+
+    - name: Deploy to Cloudflare Pages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: 'wizzleflow'
+        directory: 'dist'
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}

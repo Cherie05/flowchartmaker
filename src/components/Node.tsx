@@ -7,8 +7,10 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from 'react';
+import { Lock } from 'lucide-react';
 import type { WorkspaceTheme } from './editor/types';
 import type { FlowChartNode, NodeSide } from '../types/flowChart';
+import DOMPurify from 'dompurify';
 
 interface NodeProps {
   node: FlowChartNode;
@@ -19,7 +21,7 @@ interface NodeProps {
   isDragging: boolean;
   zoom: number;
   workspaceTheme: WorkspaceTheme;
-  onSelect: (options?: { additive?: boolean }) => void;
+  onSelect: (options?: { additive?: boolean; deep?: boolean }) => void;
   onDragStart: () => void;
   onDrag: (delta: { x: number; y: number }) => void;
   onDragEnd: () => void;
@@ -55,7 +57,7 @@ export function Node({
   const [isEditing, setIsEditing] = useState(false);
   const [isDraggingNode, setIsDraggingNode] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
   const borderMode = node.style?.borderStyle ?? 'solid';
   const borderClass =
     borderMode === 'none' ? 'border-transparent' : borderMode === 'dashed' ? 'border-dashed' : 'border-solid';
@@ -69,6 +71,7 @@ export function Node({
     fontSize,
     fontWeight,
     textAlign,
+    rotation = 0,
     opacity,
     backgroundColor,
     borderColor,
@@ -79,12 +82,25 @@ export function Node({
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(inputRef.current);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
     }
   }, [isEditing]);
 
+  const executeCommand = (command: string, e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    document.execCommand(command, false, undefined);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
   const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
+    const isAdditiveSelection = e.shiftKey || e.metaKey || e.ctrlKey;
 
     if (isEditing || target.classList.contains('connection-point') || target.closest('button, input')) {
       return;
@@ -95,25 +111,61 @@ export function Node({
 
     if (e.altKey) {
       const rect = e.currentTarget.getBoundingClientRect();
-      const side = getClosestSide(
-        {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
-        },
-        rect.width,
-        rect.height
-      );
-      onSelect();
-      onConnectStart(node.id, side, { clientX: e.clientX, clientY: e.clientY });
+      const startX = e.clientX;
+      const startY = e.clientY;
+
+      const startConnectorDrag = (clientX: number, clientY: number) => {
+        const side = getClosestSide(
+          {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+          },
+          rect.width,
+          rect.height
+        );
+
+        cleanup();
+        if (node.locked) {
+          onSelect({ additive: isAdditiveSelection, deep: true });
+          return;
+        }
+
+        onSelect({ deep: true });
+        onConnectStart(node.id, side, { clientX, clientY });
+      };
+
+      const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) >= 6) {
+          startConnectorDrag(moveEvent.clientX, moveEvent.clientY);
+        }
+      };
+
+      const handleMouseUp = () => {
+        cleanup();
+        onSelect({ additive: isAdditiveSelection, deep: true });
+      };
+
+      const cleanup = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
       return;
     }
 
-    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+    if (isAdditiveSelection) {
       onSelect({ additive: true });
       return;
     }
 
     onSelect();
+
+    if (node.locked) {
+      return;
+    }
+
     setIsDraggingNode(true);
     onDragStart();
 
@@ -141,7 +193,7 @@ export function Node({
   const handleDoubleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
 
-    if (!isDraggingNode) {
+    if (!isDraggingNode && !node.locked) {
       setIsEditing(true);
     }
   };
@@ -150,7 +202,7 @@ export function Node({
     setIsEditing(false);
   };
 
-  const handleInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     e.stopPropagation();
 
     if (e.key === 'Enter') {
@@ -164,6 +216,10 @@ export function Node({
 
   const handleConnectionPointMouseDown =
     (side: NodeSide) => (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (node.locked) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
       onConnectStart(node.id, side, { clientX: e.clientX, clientY: e.clientY });
@@ -171,6 +227,10 @@ export function Node({
 
   const handleResizeMouseDown =
     (handle: ResizeHandle) => (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (node.locked) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
       onSelect();
@@ -202,8 +262,8 @@ export function Node({
     };
 
   const connectionPointClass = isDark
-    ? 'border-slate-900 bg-slate-100 shadow-black/20 hover:bg-sky-400'
-    : 'border-slate-300 bg-white shadow-slate-300/40 hover:border-sky-300 hover:bg-sky-100';
+    ? 'border-white/70 bg-[#f8fafc] shadow-black/30 hover:scale-110 hover:bg-sky-300'
+    : 'border-slate-300 bg-white shadow-slate-400/25 hover:scale-110 hover:border-sky-400 hover:bg-sky-100';
   const deleteButtonClass = isDark
     ? 'bg-slate-900 text-white hover:bg-rose-500'
     : 'border border-slate-200 bg-white text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600';
@@ -214,7 +274,7 @@ export function Node({
     ...(backgroundColor ? { backgroundColor } : {}),
     ...(borderColor ? { borderColor } : {})
   };
-  const shouldShowHandles = showConnectionHandles || isDragging || isHovered;
+  const shouldShowHandles = !node.locked && (showConnectionHandles || isDragging || isHovered || isSelected);
 
   return (
     <div
@@ -236,7 +296,18 @@ export function Node({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {renderNodeSurface(node.type, borderClass, surfaceStateClass, surfaceStyle)}
+      {renderNodeSurface(node.type, borderClass, surfaceStateClass, surfaceStyle, rotation)}
+
+      {node.locked && (
+        <div
+          className={`pointer-events-none absolute left-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border ${
+            isDark ? 'border-white/10 bg-black/35 text-slate-100' : 'border-slate-200 bg-white/92 text-slate-700'
+          }`}
+          title="Locked node"
+        >
+          <Lock className="h-3.5 w-3.5" />
+        </div>
+      )}
 
       {shouldShowHandles && (
         <>
@@ -267,33 +338,41 @@ export function Node({
         </>
       )}
 
+      {isEditing && (
+        <div 
+          className="rich-text-toolbar absolute -top-12 left-1/2 -translate-x-1/2 bg-white dark:bg-[#1a1c21] border border-slate-200 dark:border-white/10 rounded-lg shadow-xl p-1 flex gap-1 z-[60]"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button onMouseDown={(e) => executeCommand('bold', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded font-bold text-slate-700 dark:text-slate-200">B</button>
+          <button onMouseDown={(e) => executeCommand('italic', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded italic font-serif text-slate-700 dark:text-slate-200">I</button>
+          <button onMouseDown={(e) => executeCommand('underline', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded underline text-slate-700 dark:text-slate-200">U</button>
+          <button onMouseDown={(e) => executeCommand('strikeThrough', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded line-through text-slate-700 dark:text-slate-200">S</button>
+        </div>
+      )}
       <div
         className="pointer-events-none relative z-10 flex h-full w-full items-center justify-center p-2"
         style={{
-          fontSize: fontSize ? `${fontSize}px` : undefined,
+          fontSize: `${fontSize ?? getResponsiveFontSize(node.width, node.height)}px`,
           fontWeight,
           textAlign
         }}
       >
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={node.text}
-            onChange={(e) => onTextChange(e.target.value)}
-            onBlur={handleInputSubmit}
-            onKeyDown={handleInputKeyDown}
-            className="w-full text-center bg-transparent border-none outline-none text-inherit pointer-events-auto"
-            style={{ fontSize: '12px' }}
-          />
-        ) : (
-          <span className="text-center select-none text-[13px] font-medium leading-[1.35] tracking-[-0.01em]">
-            {node.text}
-          </span>
-        )}
+        <div
+          ref={inputRef}
+          contentEditable={isEditing}
+          suppressContentEditableWarning
+          onBlur={(e) => {
+            if (e.relatedTarget && (e.relatedTarget as Element).closest?.('.rich-text-toolbar')) return;
+            onTextChange(e.currentTarget.innerHTML);
+            handleInputSubmit();
+          }}
+          onKeyDown={handleInputKeyDown}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(node.text) }}
+          className={`max-w-full whitespace-pre-wrap break-words px-1 text-[13px] font-medium leading-[1.35] tracking-[-0.01em] bg-transparent border-none outline-none text-inherit ${isEditing ? 'pointer-events-auto cursor-text select-text' : 'pointer-events-none select-none'}`}
+        />
       </div>
 
-      {showControls && (
+      {showControls && !node.locked && (
         <button
           onClick={(e) => {
             e.preventDefault();
@@ -308,6 +387,7 @@ export function Node({
       )}
 
       {showControls &&
+        !node.locked &&
         RESIZE_HANDLES.map((handle) => (
           <div
             key={handle}
@@ -350,73 +430,75 @@ function renderNodeSurface(
   type: FlowChartNode['type'],
   borderClass: string,
   surfaceStateClass: string,
-  surfaceStyle: CSSProperties
+  surfaceStyle: CSSProperties,
+  rotation: number
 ): ReactNode {
   const baseSurfaceClass = `pointer-events-none absolute border ${borderClass} ${surfaceStateClass}`;
+  const rotatedSurfaceStyle = rotation ? { ...surfaceStyle, transform: `rotate(${rotation}deg)` } : surfaceStyle;
 
   switch (type) {
     case 'start':
       return (
-        <div className={`${baseSurfaceClass} inset-0 rounded-full border-emerald-200 bg-emerald-50`} style={surfaceStyle} />
+        <div className={`${baseSurfaceClass} inset-0 rounded-full border-emerald-200 bg-emerald-50`} style={rotatedSurfaceStyle} />
       );
     case 'end':
       return (
-        <div className={`${baseSurfaceClass} inset-0 rounded-full border-rose-200 bg-rose-50`} style={surfaceStyle} />
+        <div className={`${baseSurfaceClass} inset-0 rounded-full border-rose-200 bg-rose-50`} style={rotatedSurfaceStyle} />
       );
     case 'process':
       return (
-        <div className={`${baseSurfaceClass} inset-0 rounded-[24px] border-sky-200 bg-white`} style={surfaceStyle} />
+        <div className={`${baseSurfaceClass} inset-0 rounded-[24px] border-sky-200 bg-white`} style={rotatedSurfaceStyle} />
       );
     case 'decision':
       return (
         <div
           className={`${baseSurfaceClass} inset-[12%] rounded-[24px] border-amber-200 bg-amber-50`}
-          style={{ ...surfaceStyle, transform: 'rotate(45deg)' }}
+          style={{ ...surfaceStyle, transform: `rotate(${45 + rotation}deg)` }}
         />
       );
     case 'connector':
       return (
-        <div className={`${baseSurfaceClass} inset-0 rounded-full border-violet-200 bg-violet-50`} style={surfaceStyle} />
+        <div className={`${baseSurfaceClass} inset-0 rounded-full border-violet-200 bg-violet-50`} style={rotatedSurfaceStyle} />
       );
     case 'input':
       return (
         <div
           className={`${baseSurfaceClass} inset-0 border-sky-200 bg-sky-50 [clip-path:polygon(10%_0,100%_0,90%_100%,0_100%)]`}
-          style={surfaceStyle}
+          style={rotatedSurfaceStyle}
         />
       );
     case 'manualInput':
       return (
         <div
           className={`${baseSurfaceClass} inset-0 border-fuchsia-200 bg-fuchsia-50 [clip-path:polygon(0_16%,100%_0,100%_100%,0_100%)]`}
-          style={surfaceStyle}
+          style={rotatedSurfaceStyle}
         />
       );
     case 'manualOperation':
       return (
         <div
           className={`${baseSurfaceClass} inset-0 border-orange-200 bg-orange-50 [clip-path:polygon(10%_0,90%_0,100%_100%,0_100%)]`}
-          style={surfaceStyle}
+          style={rotatedSurfaceStyle}
         />
       );
     case 'triangle':
       return (
         <div
           className={`${baseSurfaceClass} inset-0 border-slate-300 bg-slate-50 [clip-path:polygon(50%_0,100%_100%,0_100%)]`}
-          style={surfaceStyle}
+          style={rotatedSurfaceStyle}
         />
       );
     case 'hexagon':
       return (
         <div
           className={`${baseSurfaceClass} inset-0 border-cyan-200 bg-cyan-50 [clip-path:polygon(14%_0,86%_0,100%_50%,86%_100%,14%_100%,0_50%)]`}
-          style={surfaceStyle}
+          style={rotatedSurfaceStyle}
         />
       );
     case 'database':
       return (
         <>
-          <div className={`${baseSurfaceClass} inset-0 rounded-[28px] border-indigo-200 bg-indigo-50`} style={surfaceStyle} />
+          <div className={`${baseSurfaceClass} inset-0 rounded-[28px] border-indigo-200 bg-indigo-50`} style={rotatedSurfaceStyle} />
           <div className="pointer-events-none absolute inset-x-3 top-2 h-3 rounded-full border border-current/20 bg-white/35" />
           <div className="pointer-events-none absolute inset-x-3 bottom-2 h-3 rounded-full border border-current/20 bg-white/20" />
         </>
@@ -424,7 +506,7 @@ function renderNodeSurface(
     case 'annotation':
       return (
         <>
-          <div className={`${baseSurfaceClass} inset-0 rounded-[18px] border-slate-200 bg-white`} style={surfaceStyle} />
+          <div className={`${baseSurfaceClass} inset-0 rounded-[18px] border-slate-200 bg-white`} style={rotatedSurfaceStyle} />
           <div
             className="pointer-events-none absolute left-4 top-4 h-8 w-[3px] rounded-full bg-slate-300/80"
             style={borderColorFromSurface(surfaceStyle)}
@@ -432,7 +514,7 @@ function renderNodeSurface(
         </>
       );
     default:
-      return <div className={`${baseSurfaceClass} inset-0 rounded-[24px] border-slate-200 bg-white`} style={surfaceStyle} />;
+      return <div className={`${baseSurfaceClass} inset-0 rounded-[24px] border-slate-200 bg-white`} style={rotatedSurfaceStyle} />;
   }
 }
 
@@ -545,4 +627,8 @@ function getClosestSide(
   };
 
   return (Object.entries(distances).sort((left, right) => left[1] - right[1])[0]?.[0] ?? 'right') as NodeSide;
+}
+
+function getResponsiveFontSize(width: number, height: number) {
+  return Math.max(12, Math.min(18, Math.min(width / 8.4, height / 3.8)));
 }

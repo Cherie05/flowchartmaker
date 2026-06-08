@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import type { FlowChartNode } from '../../types/flowChart';
 import type { WorkspaceTheme } from './types';
 
@@ -32,6 +32,21 @@ export function EditorMinimap({
   onNavigate
 }: EditorMinimapProps) {
   const isDark = workspaceTheme === 'dark';
+  const [mapSize, setMapSize] = useState<{ width: number; height: number } | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setMapSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+      }
+    });
+    observer.observe(mapRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const workspaceViewport = {
     x: viewportScrollLeft / zoom,
     y: viewportScrollTop / zoom,
@@ -39,9 +54,14 @@ export function EditorMinimap({
     height: viewportHeight / zoom
   };
   const contentFrame = getContentFrame(nodes, workspaceViewport, workspaceWidth, workspaceHeight);
-  const scale = Math.min(MINIMAP_WIDTH / contentFrame.width, MAX_MINIMAP_HEIGHT / contentFrame.height);
-  const minimapWidth = Math.max(136, Math.round(contentFrame.width * scale));
-  const minimapHeight = Math.max(112, Math.round(contentFrame.height * scale));
+  
+  const defaultScale = Math.min(MINIMAP_WIDTH / contentFrame.width, MAX_MINIMAP_HEIGHT / contentFrame.height);
+  const defaultWidth = Math.max(136, Math.round(contentFrame.width * defaultScale));
+  const defaultHeight = Math.max(112, Math.round(contentFrame.height * defaultScale));
+
+  const minimapWidth = mapSize ? mapSize.width : defaultWidth;
+  const minimapHeight = mapSize ? mapSize.height : defaultHeight;
+
   const scaleX = minimapWidth / contentFrame.width;
   const scaleY = minimapHeight / contentFrame.height;
   const viewportRect = {
@@ -62,7 +82,8 @@ export function EditorMinimap({
 
   return (
     <div
-      className={`absolute bottom-24 right-6 z-30 hidden rounded-[24px] border p-3 shadow-xl backdrop-blur md:block ${
+      style={{ resize: 'both', overflow: 'hidden', minWidth: '180px', minHeight: '160px', maxWidth: '80vw', maxHeight: '80vh' }}
+      className={`absolute bottom-24 right-6 z-30 hidden flex-col rounded-[24px] border p-3 shadow-xl backdrop-blur md:flex ${
         isDark
           ? 'border-white/10 bg-[#1a1c21]/92 shadow-black/30'
           : 'border-white/80 bg-white/90 shadow-[0_20px_45px_-30px_rgba(148,163,184,0.55)]'
@@ -79,10 +100,11 @@ export function EditorMinimap({
       </div>
 
       <div
-        className={`relative overflow-hidden rounded-[18px] border ${
+        ref={mapRef}
+        className={`relative flex-1 overflow-hidden rounded-[18px] border ${
           isDark ? 'border-white/10 bg-[#111318]' : 'border-slate-200 bg-[#f8f4eb]'
         }`}
-        style={{ width: minimapWidth, height: minimapHeight }}
+        style={mapSize ? undefined : { width: defaultWidth, height: defaultHeight }}
         onMouseDown={handleNavigate}
       >
         <div

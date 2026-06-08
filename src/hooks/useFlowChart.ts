@@ -102,18 +102,20 @@ export function useFlowChart(): UseFlowChartReturn {
   }, [saveToHistory]);
 
   const addNode = useCallback((type: FlowChartNode['type'], position: Position) => {
-    const newNode: FlowChartNode = {
-      id: createId('node'),
-      type,
-      position,
-      text: getDefaultText(type),
-      width: getDefaultWidth(type),
-      height: getDefaultHeight(type)
-    };
-
     transformFlowChart((prev) => ({
       ...prev,
-      nodes: [...prev.nodes, newNode],
+      nodes: [
+        ...prev.nodes,
+        {
+          id: createId('node'),
+          type,
+          position,
+          text: getDefaultText(type),
+          width: getDefaultWidth(type),
+          height: getDefaultHeight(type),
+          zIndex: getNextZIndex(prev.nodes)
+        }
+      ],
       updatedAt: new Date()
     }));
   }, [transformFlowChart]);
@@ -185,7 +187,8 @@ export function useFlowChart(): UseFlowChartReturn {
         toSide,
         type: 'curved',
         startMarker: 'none',
-        endMarker: 'arrow'
+        endMarker: 'arrow',
+        labelPosition: 0.5
       };
 
       return {
@@ -402,7 +405,10 @@ function cloneNode(node: FlowChartNode): FlowChartNode {
 }
 
 function cloneConnection(connection: Connection): Connection {
-  return { ...connection };
+  return {
+    ...connection,
+    waypoints: connection.waypoints?.map((point) => ({ ...point }))
+  };
 }
 
 function cloneFlowChart(flowChart: FlowChart): FlowChart {
@@ -512,6 +518,9 @@ function areFlowChartsEqual(left: FlowChart, right: FlowChart): boolean {
       current.height !== previous.height ||
       current.position.x !== previous.position.x ||
       current.position.y !== previous.position.y ||
+      current.groupId !== previous.groupId ||
+      current.zIndex !== previous.zIndex ||
+      current.locked !== previous.locked ||
       !areStylesEqual(current.style, previous.style)
     ) {
       return false;
@@ -532,13 +541,27 @@ function areFlowChartsEqual(left: FlowChart, right: FlowChart): boolean {
       current.type !== previous.type ||
       current.startMarker !== previous.startMarker ||
       current.endMarker !== previous.endMarker ||
-      current.color !== previous.color
+      current.color !== previous.color ||
+      current.labelPosition !== previous.labelPosition ||
+      !areWaypointsEqual(current.waypoints, previous.waypoints)
     ) {
       return false;
     }
   }
 
   return true;
+}
+
+function areWaypointsEqual(left: Connection['waypoints'], right: Connection['waypoints']) {
+  if (!left && !right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((point, index) => point.x === right[index]?.x && point.y === right[index]?.y);
 }
 
 function areStylesEqual(
@@ -562,6 +585,11 @@ function areStylesEqual(
     left.opacity === right.opacity &&
     left.fontSize === right.fontSize &&
     left.fontWeight === right.fontWeight &&
-    left.textAlign === right.textAlign
+    left.textAlign === right.textAlign &&
+    left.rotation === right.rotation
   );
+}
+
+function getNextZIndex(nodes: FlowChartNode[]): number {
+  return nodes.reduce((max, node) => Math.max(max, node.zIndex ?? 0), 0) + 1;
 }

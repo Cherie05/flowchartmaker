@@ -32,6 +32,7 @@ import { EditorTopBar } from '../components/editor/EditorTopBar';
 import type { WorkspaceNodeType, WorkspaceTheme } from '../components/editor/types';
 import { useFlowChart } from '../hooks/useFlowChart';
 import { createId } from '../lib/createId';
+import { buildConnectionGeometry } from '../lib/connectionRouting';
 import { getErrorMessage } from '../lib/errors';
 import { buildFlowchartExport, svgToPngDataUrl } from '../lib/flowchartExport';
 import { aiService } from '../services/aiService';
@@ -46,8 +47,16 @@ const MIN_WORKSPACE_HEIGHT = 4200;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.2;
 const WORKSPACE_THEME_STORAGE_KEY = 'flowchart-workspace-theme';
+const WORKSPACE_LEFT_PANEL_STORAGE_KEY = 'flowchart-workspace-left-panel-collapsed';
+const WORKSPACE_RIGHT_PANEL_STORAGE_KEY = 'flowchart-workspace-right-panel-collapsed';
+const WORKSPACE_TOP_BAR_STORAGE_KEY = 'flowchart-workspace-top-bar-collapsed';
+const WORKSPACE_HINTS_STORAGE_KEY = 'flowchart-workspace-hints-visible';
+const WORKSPACE_DEFAULT_STYLE_STORAGE_KEY = 'flowchart-workspace-default-styles';
 const GRID_SIZE = 24;
 const PASTE_OFFSET = 48;
+
+type NodeStyleDefaults = Partial<NonNullable<FlowChartNode['style']>>;
+type DefaultStyleMap = Partial<Record<FlowChartNode['type'], NodeStyleDefaults>>;
 
 interface SelectionBoxState {
   x: number;
@@ -70,12 +79,17 @@ interface DragConnectorState {
   targetSide: NodeSide | null;
 }
 
-interface ConnectorQuickAddState {
-  fromNodeId: string;
-  fromSide: NodeSide;
-  position: Position;
-  title: string;
-}
+type ConnectorQuickAddState = {
+  nodeId: string;
+  handleId: string;
+};
+
+type AlignmentGuide = {
+  type: 'vertical' | 'horizontal';
+  position: number;
+  start: number;
+  end: number;
+};
 
 export function Editor() {
   const { id } = useParams<{ id: string }>();
@@ -84,7 +98,6 @@ export function Editor() {
     flowChart,
     draggedNode,
     setSelectedNode,
-    addNode,
     updateNode,
     addConnection,
     deleteConnection,
@@ -106,6 +119,7 @@ export function Editor() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectionBox, setSelectionBox] = useState<SelectionBoxState | null>(null);
   const [dragConnector, setDragConnector] = useState<DragConnectorState | null>(null);
+  const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
   const [connectorQuickAdd, setConnectorQuickAdd] = useState<ConnectorQuickAddState | null>(null);
   const [commandMenuQuery, setCommandMenuQuery] = useState('');
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
@@ -138,12 +152,52 @@ export function Editor() {
     height: 0
   });
   const [zoom, setZoom] = useState(1);
-  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() => {
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [isLeftRailCollapsed, setIsLeftRailCollapsed] = useState(() => {
     if (typeof window === 'undefined') {
-      return 'dark';
+      return false;
     }
 
-    return window.localStorage.getItem(WORKSPACE_THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+    return window.localStorage.getItem(WORKSPACE_LEFT_PANEL_STORAGE_KEY) === 'true';
+  });
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.localStorage.getItem(WORKSPACE_RIGHT_PANEL_STORAGE_KEY) === 'true';
+  });
+  const [isTopBarCollapsed, setIsTopBarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(WORKSPACE_TOP_BAR_STORAGE_KEY) === 'true';
+  });
+  const [showCanvasHints, setShowCanvasHints] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+
+    return window.localStorage.getItem(WORKSPACE_HINTS_STORAGE_KEY) !== 'false';
+  });
+  const [lastUsedNodeType, setLastUsedNodeType] = useState<FlowChartNode['type']>('process');
+  const [defaultNodeStyles, setDefaultNodeStyles] = useState<DefaultStyleMap>(() => {
+    if (typeof window === 'undefined') {
+      return {};
+    }
+
+    try {
+      const raw = window.localStorage.getItem(WORKSPACE_DEFAULT_STYLE_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as DefaultStyleMap) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() => {
+    if (typeof window === 'undefined') {
+      return 'light';
+    }
+
+    const stored = window.localStorage.getItem(WORKSPACE_THEME_STORAGE_KEY);
+    return stored === 'dark' ? 'dark' : 'light';
   });
   const zoomRef = useRef(zoom);
 
@@ -264,13 +318,16 @@ export function Editor() {
         return;
       }
 
-      const positionedNodes = ensureWorkspacePadding(data.nodes || []);
+      const { nodes: positionedNodes, connections: positionedConnections } = applyWorkspacePadding(
+        data.nodes || [],
+        data.connections || []
+      );
 
       loadFlowChart({
         id: data.id,
         name: data.name,
         nodes: positionedNodes,
-        connections: data.connections || [],
+        connections: positionedConnections,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       });
@@ -334,10 +391,59 @@ export function Editor() {
   }, [workspaceTheme]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(WORKSPACE_LEFT_PANEL_STORAGE_KEY, String(isLeftRailCollapsed));
+  }, [isLeftRailCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(WORKSPACE_RIGHT_PANEL_STORAGE_KEY, String(isRightSidebarCollapsed));
+  }, [isRightSidebarCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(WORKSPACE_TOP_BAR_STORAGE_KEY, String(isTopBarCollapsed));
+  }, [isTopBarCollapsed]);
+
+  useEffect(() => {
+    if (selectedNodeIds.length > 0 && !isTopBarCollapsed) {
+      setIsTopBarCollapsed(true);
+    }
+  }, [selectedNodeIds.length, isTopBarCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(WORKSPACE_HINTS_STORAGE_KEY, String(showCanvasHints));
+  }, [showCanvasHints]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(WORKSPACE_DEFAULT_STYLE_STORAGE_KEY, JSON.stringify(defaultNodeStyles));
+  }, [defaultNodeStyles]);
+
+  useEffect(() => {
     if (selectedConnection && !flowChart.connections.some((connection) => connection.id === selectedConnection)) {
       setSelectedConnection(null);
     }
   }, [flowChart.connections, selectedConnection]);
+
+  useEffect(() => {
+    if (flowChart.nodes.length && showCanvasHints) {
+      setShowCanvasHints(false);
+    }
+  }, [flowChart.nodes.length, showCanvasHints]);
 
   useEffect(() => {
     dragConnectorRef.current = dragConnector;
@@ -466,7 +572,10 @@ export function Editor() {
         })),
       connections: flowChart.connections
         .filter((connection) => selectedNodeIdSet.has(connection.from) && selectedNodeIdSet.has(connection.to))
-        .map((connection) => ({ ...connection }))
+        .map((connection) => ({
+          ...connection,
+          waypoints: connection.waypoints?.map((point) => ({ ...point }))
+        }))
     };
   }, [flowChart.connections, flowChart.nodes, selectedNodeIds]);
 
@@ -480,6 +589,9 @@ export function Editor() {
     clipboardSelectionRef.current = snapshot;
 
     try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('flowchart-clipboard', JSON.stringify({ kind: 'flowchart-selection', snapshot }));
+      }
       await navigator.clipboard.writeText(JSON.stringify({ kind: 'flowchart-selection', snapshot }));
     } catch {
       // Ignore clipboard write failures and keep the local clipboard fallback.
@@ -507,7 +619,30 @@ export function Editor() {
           }
         }
       } catch {
-        snapshot = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const localRaw = window.localStorage.getItem('flowchart-clipboard');
+            if (localRaw) {
+              const parsed = JSON.parse(localRaw) as unknown;
+              if (
+                parsed &&
+                typeof parsed === 'object' &&
+                'kind' in parsed &&
+                parsed.kind === 'flowchart-selection' &&
+                'snapshot' in parsed
+              ) {
+                const candidate = parsed.snapshot as ClipboardSelection;
+                if (Array.isArray(candidate.nodes) && Array.isArray(candidate.connections)) {
+                  snapshot = candidate;
+                }
+              }
+            }
+          } catch {
+            snapshot = null;
+          }
+        } else {
+          snapshot = null;
+        }
       }
     }
 
@@ -526,9 +661,18 @@ export function Editor() {
     const offsetX = targetPosition.x - bounds.minX + PASTE_OFFSET * (pasteCountRef.current - 1);
     const offsetY = targetPosition.y - bounds.minY + PASTE_OFFSET * (pasteCountRef.current - 1);
     const nodeIdMap = new Map<string, string>();
+    const groupIdMap = new Map<string, string>();
     const nextNodes = snapshot.nodes.map((node) => {
       const nextId = createId('node');
       nodeIdMap.set(node.id, nextId);
+
+      const nextGroupId = node.groupId
+        ? groupIdMap.get(node.groupId) ?? (() => {
+            const created = createId('group');
+            groupIdMap.set(node.groupId!, created);
+            return created;
+          })()
+        : undefined;
 
       return {
         ...node,
@@ -537,7 +681,9 @@ export function Editor() {
           x: node.position.x + offsetX,
           y: node.position.y + offsetY
         }),
-        style: node.style ? { ...node.style } : undefined
+        style: node.style ? { ...node.style } : undefined,
+        groupId: nextGroupId,
+        zIndex: undefined
       };
     });
     const nextConnections = snapshot.connections.flatMap((connection) => {
@@ -553,14 +699,24 @@ export function Editor() {
           ...connection,
           id: createId('connection'),
           from,
-          to
+          to,
+          waypoints: connection.waypoints?.map((point) => ({
+            x: point.x + offsetX,
+            y: point.y + offsetY
+          }))
         }
       ];
     });
 
     transformFlowChart((prev) => ({
       ...prev,
-      nodes: [...prev.nodes, ...nextNodes],
+      nodes: [
+        ...prev.nodes,
+        ...nextNodes.map((node, index) => ({
+          ...node,
+          zIndex: getNextNodeZIndex(prev.nodes) + index
+        }))
+      ],
       connections: [...prev.connections, ...nextConnections],
       updatedAt: new Date()
     }));
@@ -612,7 +768,8 @@ export function Editor() {
         y: getWorkspacePoint(e.clientX, e.clientY).y - 40
       });
 
-      addNode('process', position);
+      const nextId = addNodeAtPosition(lastUsedNodeType, position);
+      setNodeSelection([nextId], nextId);
     }
   };
 
@@ -705,7 +862,39 @@ export function Editor() {
     setSelectedConnection(null);
   }, []);
 
+  const createNodeDraft = useCallback((type: FlowChartNode['type'], position: Position, overrides?: Partial<FlowChartNode>): FlowChartNode => {
+    const defaultStyle = defaultNodeStyles[type];
+
+    const draft: FlowChartNode = {
+      id: overrides?.id ?? createId('node'),
+      type,
+      position: snapPosition(position),
+      text: overrides?.text ?? getDefaultText(type),
+      width: overrides?.width ?? getDefaultWidth(type),
+      height: overrides?.height ?? getDefaultHeight(type),
+    };
+
+    if (defaultStyle || overrides?.style) {
+      draft.style = {
+        ...(defaultStyle ?? {}),
+        ...(overrides?.style ?? {})
+      };
+    }
+
+    if (overrides?.zIndex !== undefined) draft.zIndex = overrides.zIndex;
+    if (overrides?.groupId !== undefined) draft.groupId = overrides.groupId;
+    if (overrides?.locked !== undefined) draft.locked = overrides.locked;
+
+    return draft;
+  }, [defaultNodeStyles]);
+
   const handleConnectStart = useCallback((nodeId: string, side: NodeSide, clientPoint: { clientX: number; clientY: number }) => {
+    const sourceNode = flowChart.nodes.find((node) => node.id === nodeId);
+
+    if (!sourceNode || sourceNode.locked) {
+      return;
+    }
+
     setConnectorQuickAdd(null);
     setSelectedConnection(null);
     updateDragConnectorTarget(nodeId, side, clientPoint.clientX, clientPoint.clientY);
@@ -736,7 +925,6 @@ export function Editor() {
         return;
       }
 
-      const sourceNode = flowChart.nodes.find((node) => node.id === nodeId);
       handleConnectorQuickAddOpen({
         fromNodeId: nodeId,
         fromSide: side,
@@ -749,7 +937,7 @@ export function Editor() {
     document.addEventListener('mouseup', handleMouseUp);
   }, [addConnection, flowChart.nodes, handleConnectorQuickAddOpen, updateDragConnectorTarget]);
 
-  const handleCreateNodeFromConnector = useCallback((type: FlowChartNode['type']) => {
+  function handleCreateNodeFromConnector(type: FlowChartNode['type']) {
     if (!connectorQuickAdd) {
       return;
     }
@@ -757,17 +945,14 @@ export function Editor() {
     const width = getDefaultWidth(type);
     const height = getDefaultHeight(type);
     const nextNodeId = createId('node');
-    const nextNode: FlowChartNode = {
+    const nextNode = createNodeDraft(type, {
+      x: Math.max(48, connectorQuickAdd.position.x - width / 2),
+      y: Math.max(48, connectorQuickAdd.position.y - height / 2)
+    }, {
       id: nextNodeId,
-      type,
-      text: getDefaultText(type),
-      position: snapPosition({
-        x: Math.max(48, connectorQuickAdd.position.x - width / 2),
-        y: Math.max(48, connectorQuickAdd.position.y - height / 2)
-      }),
       width,
       height
-    };
+    });
     const nextConnection: Connection = {
       id: createId('connection'),
       from: connectorQuickAdd.fromNodeId,
@@ -776,20 +961,23 @@ export function Editor() {
       toSide: getOppositeSide(connectorQuickAdd.fromSide),
       type: 'curved',
       startMarker: 'none',
-      endMarker: 'arrow'
+      endMarker: 'arrow',
+      labelPosition: 0.5
     };
 
     transformFlowChart((prev) => ({
       ...prev,
-      nodes: [...prev.nodes, nextNode],
+      nodes: [...prev.nodes, { ...nextNode, zIndex: getNextNodeZIndex(prev.nodes) }],
       connections: [...prev.connections, nextConnection],
       updatedAt: new Date()
     }));
     setConnectorQuickAdd(null);
     setNodeSelection([nextNodeId], nextNodeId);
-  }, [connectorQuickAdd, setNodeSelection, transformFlowChart]);
+    setLastUsedNodeType(type);
+    setShowCanvasHints(false);
+  }
 
-  const handleExport = useCallback(async (format: 'png' | 'svg' | 'json' | 'pdf') => {
+  const handleExport = useCallback(async (format: 'png' | 'svg' | 'json' | 'pdf', options?: { transparent?: boolean }) => {
     switch (format) {
       case 'json': {
         const exportData = { ...flowChart, name: flowchartName };
@@ -799,13 +987,13 @@ export function Editor() {
         break;
       }
       case 'svg': {
-        const snapshot = buildFlowchartExport(flowChart.nodes, flowChart.connections);
+        const snapshot = buildFlowchartExport(flowChart.nodes, flowChart.connections, { transparent: options?.transparent });
         const svgBlob = new Blob([snapshot.svg], { type: 'image/svg+xml;charset=utf-8' });
         downloadBlob(svgBlob, `${flowchartName.replace(/\s+/g, '_').trim() || 'flowchart'}.svg`);
         break;
       }
       case 'png': {
-        const snapshot = buildFlowchartExport(flowChart.nodes, flowChart.connections);
+        const snapshot = buildFlowchartExport(flowChart.nodes, flowChart.connections, { transparent: options?.transparent });
         const pngDataUrl = await svgToPngDataUrl(snapshot.svg, snapshot.width, snapshot.height);
         const pngBlob = await fetch(pngDataUrl).then((response) => response.blob());
         downloadBlob(pngBlob, `${flowchartName.replace(/\s+/g, '_').trim() || 'flowchart'}.png`);
@@ -834,18 +1022,22 @@ export function Editor() {
     reader.onload = (event) => {
       try {
         const importedFlowchart = parseImportedFlowChart(event.target?.result, flowchartName);
-        const positionedNodes = ensureWorkspacePadding(importedFlowchart.nodes);
+        const { nodes: positionedNodes, connections: positionedConnections } = applyWorkspacePadding(
+          importedFlowchart.nodes,
+          importedFlowchart.connections
+        );
 
         replaceFlowChartContent({
           name: importedFlowchart.name,
           nodes: positionedNodes,
-          connections: importedFlowchart.connections
+          connections: positionedConnections
         });
         setFlowchartName(importedFlowchart.name);
         setSelectedConnection(null);
         setDragConnector(null);
         setConnectorQuickAdd(null);
         setErrorMessage('');
+        setShowCanvasHints(false);
         scheduleScrollToNodes(positionedNodes);
       } catch (error) {
         setErrorMessage(getErrorMessage(error, 'Invalid file format. Please select a valid JSON file.'));
@@ -874,6 +1066,7 @@ export function Editor() {
       setSelectedConnection(null);
       setDragConnector(null);
       setConnectorQuickAdd(null);
+      setShowCanvasHints(false);
       scheduleScrollToNodes(generatedFlowchart.nodes);
 
       if (!flowChart.nodes.length || flowchartName === 'Untitled Flowchart') {
@@ -898,6 +1091,26 @@ export function Editor() {
     scheduleScrollToNodes([]);
   };
 
+  const addNodeAtPosition = useCallback((type: FlowChartNode['type'], position: Position, overrides?: Partial<FlowChartNode>) => {
+    const node = createNodeDraft(type, position, overrides);
+    setLastUsedNodeType(type);
+    setShowCanvasHints(false);
+
+    transformFlowChart((prev) => ({
+      ...prev,
+      nodes: [
+        ...prev.nodes,
+        {
+          ...node,
+          zIndex: getNextNodeZIndex(prev.nodes)
+        }
+      ],
+      updatedAt: new Date()
+    }));
+
+    return node.id;
+  }, [createNodeDraft, transformFlowChart]);
+
   const getSuggestedNodePosition = useCallback((): Position => {
     const viewport = workspaceViewportRef.current;
     const column = flowChart.nodes.length % 3;
@@ -916,8 +1129,20 @@ export function Editor() {
   }, [flowChart.nodes.length]);
 
   const addNodeFromPalette = useCallback((type: FlowChartNode['type']) => {
-    addNode(type, getSuggestedNodePosition());
-  }, [addNode, getSuggestedNodePosition]);
+    const nextId = addNodeAtPosition(type, getSuggestedNodePosition());
+    setNodeSelection([nextId], nextId);
+  }, [addNodeAtPosition, getSuggestedNodePosition, setNodeSelection]);
+
+  function saveSelectedNodeStyleAsDefault() {
+    if (!selectedNodeData?.style) {
+      return;
+    }
+
+    setDefaultNodeStyles((previous) => ({
+      ...previous,
+      [selectedNodeData.type]: { ...selectedNodeData.style }
+    }));
+  }
 
   const focusAIComposer = useCallback(() => {
     aiTextareaRef.current?.focus();
@@ -1040,13 +1265,104 @@ export function Editor() {
       id: `add-${nodeType.type}`,
       title: `Add ${nodeType.label}`,
       description: nodeType.description,
-      shortcut: nodeType.type === 'process' ? 'Double-click canvas' : undefined
+      shortcut:
+        nodeType.type === 'process'
+          ? 'R'
+          : nodeType.type === 'decision'
+            ? 'D'
+            : nodeType.type === 'connector'
+              ? 'O'
+              : nodeType.type === 'annotation'
+                ? 'L'
+                : nodeType.type === 'triangle'
+                  ? 'T'
+                  : undefined
     })),
     {
       id: 'fit-canvas',
       title: 'Fit board to screen',
       description: 'Frame the current flowchart in the viewport.',
       shortcut: 'Fit'
+    },
+    {
+      id: 'fit-selection',
+      title: 'Fit selection',
+      description: 'Frame the selected nodes in the viewport.',
+      shortcut: 'F'
+    },
+    {
+      id: 'align-left',
+      title: 'Align left',
+      description: 'Align selected nodes to the left edge.'
+    },
+    {
+      id: 'align-top',
+      title: 'Align top',
+      description: 'Align selected nodes to the top edge.'
+    },
+    {
+      id: 'distribute-horizontal',
+      title: 'Distribute horizontally',
+      description: 'Space selected nodes evenly across the row.'
+    },
+    {
+      id: 'distribute-vertical',
+      title: 'Distribute vertically',
+      description: 'Space selected nodes evenly down the column.'
+    },
+    {
+      id: 'tidy-selection',
+      title: 'Tidy selection',
+      description: 'Arrange selected nodes into a cleaner grid.'
+    },
+    {
+      id: 'group-selection',
+      title: 'Group selection',
+      description: 'Keep the selected nodes together.'
+    },
+    {
+      id: 'ungroup-selection',
+      title: 'Ungroup selection',
+      description: 'Break the selected group apart.'
+    },
+    {
+      id: 'bring-front',
+      title: 'Bring selection forward',
+      description: 'Raise selected nodes above others.'
+    },
+    {
+      id: 'send-back',
+      title: 'Send selection backward',
+      description: 'Push selected nodes behind others.'
+    },
+    {
+      id: flowChart.nodes.some((node) => selectedNodeIds.includes(node.id) && node.locked)
+        ? 'unlock-selection'
+        : 'lock-selection',
+      title: flowChart.nodes.some((node) => selectedNodeIds.includes(node.id) && node.locked)
+        ? 'Unlock selection'
+        : 'Lock selection',
+      description: 'Prevent selected nodes from moving or editing until they are unlocked.'
+    },
+    {
+      id: 'reset-route',
+      title: 'Reset connector route',
+      description: 'Return the selected connection to its automatic route.'
+    },
+    {
+      id: 'toggle-left-panel',
+      title: isLeftRailCollapsed ? 'Show left tools' : 'Hide left tools',
+      description: 'Collapse or expand the quick-add tool rail.'
+    },
+    {
+      id: 'toggle-right-panel',
+      title: isRightSidebarCollapsed ? 'Show right inspector' : 'Hide right inspector',
+      description: 'Collapse or expand the AI and inspector sidebar.'
+    },
+    {
+      id: 'toggle-hints',
+      title: showCanvasHints ? 'Hide canvas hints' : 'Show canvas hints',
+      description: 'Reduce or restore the canvas helper overlays.'
     },
     {
       id: 'focus-ai',
@@ -1058,7 +1374,7 @@ export function Editor() {
       id: 'toggle-theme',
       title: workspaceTheme === 'dark' ? 'Switch to light workspace' : 'Switch to dark workspace',
       description: 'Change the board canvas theme.',
-      shortcut: 'Cmd/Ctrl + K'
+      shortcut: 'Theme'
     },
     {
       id: 'export-png',
@@ -1081,8 +1397,16 @@ export function Editor() {
     selectedNodeIds.length === 1
       ? flowChart.nodes.find((node) => node.id === selectedNodeIds[0]) ?? null
       : null;
+  const selectedNodesData = useMemo(
+    () => flowChart.nodes.filter((node) => selectedNodeIds.includes(node.id)),
+    [flowChart.nodes, selectedNodeIds]
+  );
   const selectedConnectionData =
     flowChart.connections.find((connection) => connection.id === selectedConnection) ?? null;
+  const hasLockedSelection = selectedNodesData.some((node) => Boolean(node.locked));
+  const allSelectedNodesLocked = selectedNodesData.length > 0 && selectedNodesData.every((node) => Boolean(node.locked));
+  const canUngroupSelection =
+    selectedNodesData.length > 1 && selectedNodesData.every((node) => Boolean(node.groupId));
   const selectedConnectionEndpoints = useMemo(() => (
     selectedConnectionData
       ? {
@@ -1091,6 +1415,18 @@ export function Editor() {
         }
       : null
   ), [flowChart.nodes, selectedConnectionData]);
+  const selectedConnectionGeometry = useMemo(() => (
+    selectedConnectionData && selectedConnectionEndpoints?.from && selectedConnectionEndpoints.to
+      ? buildConnectionGeometry({
+          connection: selectedConnectionData,
+          fromNode: selectedConnectionEndpoints.from,
+          toNode: selectedConnectionEndpoints.to,
+          obstacleNodes: flowChart.nodes.filter(
+            (node) => node.id !== selectedConnectionData.from && node.id !== selectedConnectionData.to
+          )
+        })
+      : null
+  ), [flowChart.nodes, selectedConnectionData, selectedConnectionEndpoints]);
   const connectingNodeLabel = dragConnector
     ? flowChart.nodes.find((node) => node.id === dragConnector.fromNodeId)?.text || 'this node'
     : null;
@@ -1144,13 +1480,21 @@ export function Editor() {
         zoom
       )
     : null;
-  const connectionToolbarPosition =
-    selectedConnectionData && selectedConnectionEndpoints?.from && selectedConnectionEndpoints.to
+  const multiToolbarPosition =
+    selectedNodeIds.length > 1 && selectedNodesData.length
       ? projectWorkspacePoint(
-          getConnectionMidpoint(
-            getNodeConnectionPoint(selectedConnectionEndpoints.from, selectedConnectionData.fromSide),
-            getNodeConnectionPoint(selectedConnectionEndpoints.to, selectedConnectionData.toSide)
-          ),
+          {
+            x: selectedNodesData.reduce((sum, node) => sum + node.position.x + node.width / 2, 0) / selectedNodesData.length,
+            y: getNodeBounds(selectedNodesData).minY - 28
+          },
+          viewportState,
+          zoom
+        )
+      : null;
+  const connectionToolbarPosition =
+    selectedConnectionGeometry
+      ? projectWorkspacePoint(
+          selectedConnectionGeometry.labelPoint,
           viewportState,
           zoom
         )
@@ -1160,6 +1504,10 @@ export function Editor() {
     : null;
 
   const openQuickAddFromNode = useCallback((node: FlowChartNode, side: NodeSide = 'right') => {
+    if (node.locked) {
+      return;
+    }
+
     handleConnectorQuickAddOpen({
       fromNodeId: node.id,
       fromSide: side,
@@ -1169,7 +1517,7 @@ export function Editor() {
   }, [handleConnectorQuickAddOpen]);
 
   const openQuickAddFromConnection = useCallback(() => {
-    if (!selectedConnectionData || !selectedConnectionEndpoints?.to) {
+    if (!selectedConnectionData || !selectedConnectionEndpoints?.to || selectedConnectionEndpoints.to.locked) {
       return;
     }
 
@@ -1200,7 +1548,7 @@ export function Editor() {
     void pasteSelection(clipboardSelectionRef.current);
   }, [pasteSelection, selectedNodeData]);
 
-  const handleCommandSelect = useCallback((item: CommandMenuItem) => {
+  function handleCommandSelect(item: CommandMenuItem) {
     if (item.id.startsWith('add-')) {
       addNodeFromPalette(item.id.replace('add-', '') as FlowChartNode['type']);
       closeCommandMenu();
@@ -1210,6 +1558,56 @@ export function Editor() {
     switch (item.id) {
       case 'fit-canvas':
         scheduleScrollToNodes(flowChart.nodes);
+        break;
+      case 'fit-selection':
+        fitSelection();
+        break;
+      case 'align-left':
+        alignSelection('left');
+        break;
+      case 'align-top':
+        alignSelection('top');
+        break;
+      case 'distribute-horizontal':
+        distributeSelection('horizontal');
+        break;
+      case 'distribute-vertical':
+        distributeSelection('vertical');
+        break;
+      case 'tidy-selection':
+        tidySelection();
+        break;
+      case 'group-selection':
+        groupSelection();
+        break;
+      case 'ungroup-selection':
+        ungroupSelection();
+        break;
+      case 'bring-front':
+        moveSelectionInStack('front');
+        break;
+      case 'send-back':
+        moveSelectionInStack('back');
+        break;
+      case 'lock-selection':
+        setSelectionLocked(true);
+        break;
+      case 'unlock-selection':
+        setSelectionLocked(false);
+        break;
+      case 'reset-route':
+        if (selectedConnectionData) {
+          updateConnection(selectedConnectionData.id, { waypoints: undefined });
+        }
+        break;
+      case 'toggle-left-panel':
+        setIsLeftRailCollapsed((current) => !current);
+        break;
+      case 'toggle-right-panel':
+        setIsRightSidebarCollapsed((current) => !current);
+        break;
+      case 'toggle-hints':
+        setShowCanvasHints((current) => !current);
         break;
       case 'focus-ai':
         focusAIComposer();
@@ -1231,7 +1629,7 @@ export function Editor() {
     }
 
     closeCommandMenu();
-  }, [addNodeFromPalette, closeCommandMenu, flowChart.nodes, focusAIComposer, handleExport, scheduleScrollToNodes]);
+  }
 
   const handleWorkspacePanStart = (e: ReactMouseEvent<HTMLDivElement>) => {
     const viewport = workspaceViewportRef.current;
@@ -1275,11 +1673,19 @@ export function Editor() {
     applyZoom(nextZoom, { clientX: e.clientX, clientY: e.clientY });
   };
 
-  const handleNodeSelect = useCallback((nodeId: string, options?: { additive?: boolean }) => {
+  const handleNodeSelect = useCallback((nodeId: string, options?: { additive?: boolean; deep?: boolean }) => {
+    const clickedNode = flowChart.nodes.find((node) => node.id === nodeId);
+    const groupMemberIds =
+      clickedNode?.groupId && !options?.deep
+        ? flowChart.nodes.filter((node) => node.groupId === clickedNode.groupId).map((node) => node.id)
+        : [nodeId];
+
     if (options?.additive) {
       setSelectedNodeIds((previous) => {
-        const exists = previous.includes(nodeId);
-        const next = exists ? previous.filter((id) => id !== nodeId) : [...previous, nodeId];
+        const exists = groupMemberIds.every((id) => previous.includes(id));
+        const next = exists
+          ? previous.filter((id) => !groupMemberIds.includes(id))
+          : [...previous, ...groupMemberIds];
         setSelectedNode(next[next.length - 1] ?? null);
         return next;
       });
@@ -1287,12 +1693,22 @@ export function Editor() {
       return;
     }
 
-    setNodeSelection([nodeId], nodeId);
-  }, [setNodeSelection, setSelectedNode]);
+    setNodeSelection(groupMemberIds, nodeId);
+  }, [flowChart.nodes, setNodeSelection, setSelectedNode]);
 
   const handleNodeDragStart = useCallback((nodeId: string) => {
-    const activeNodeIds =
-      selectedNodeIds.length > 1 && selectedNodeIds.includes(nodeId) ? selectedNodeIds : [nodeId];
+    const clickedNode = flowChart.nodes.find((node) => node.id === nodeId);
+
+    if (!clickedNode || clickedNode.locked) {
+      setNodeSelection([nodeId], nodeId);
+      return;
+    }
+
+    const canDragSelection =
+      selectedNodeIds.length > 1 &&
+      selectedNodeIds.includes(nodeId) &&
+      flowChart.nodes.filter((node) => selectedNodeIds.includes(node.id)).every((node) => !node.locked);
+    const activeNodeIds = canDragSelection ? selectedNodeIds : [nodeId];
     const activeNodePositions = Object.fromEntries(
       flowChart.nodes
         .filter((node) => activeNodeIds.includes(node.id))
@@ -1301,7 +1717,7 @@ export function Editor() {
 
     dragStartPositionsRef.current = activeNodePositions;
 
-    if (!selectedNodeIds.includes(nodeId) || selectedNodeIds.length <= 1) {
+    if (!canDragSelection) {
       setNodeSelection([nodeId], nodeId);
     }
 
@@ -1310,46 +1726,137 @@ export function Editor() {
 
   const handleNodeDrag = useCallback((delta: Position) => {
     const dragStartPositions = dragStartPositionsRef.current;
+    if (!dragStartPositions) return;
 
-    if (!dragStartPositions) {
-      return;
+    let adjustedDeltaX = delta.x;
+    let adjustedDeltaY = delta.y;
+    const newGuides: AlignmentGuide[] = [];
+
+    const activeIds = Object.keys(dragStartPositions);
+    if (activeIds.length === 1) {
+      const nodeId = activeIds[0];
+      const origin = dragStartPositions[nodeId];
+      const draggedNode = flowChart.nodes.find(n => n.id === nodeId);
+      
+      if (draggedNode) {
+        const rawX = origin.x + delta.x;
+        const rawY = origin.y + delta.y;
+        
+        const SNAP_THRESHOLD = 8;
+        const targetCenterX = rawX + draggedNode.width / 2;
+        const targetCenterY = rawY + draggedNode.height / 2;
+        const targetRightX = rawX + draggedNode.width;
+        const targetBottomY = rawY + draggedNode.height;
+
+        let snappedX = false;
+        let snappedY = false;
+
+        const otherNodes = flowChart.nodes.filter(n => n.id !== nodeId);
+
+        for (const other of otherNodes) {
+          const otherCenterX = other.position.x + other.width / 2;
+          const otherCenterY = other.position.y + other.height / 2;
+          const otherRightX = other.position.x + other.width;
+          const otherBottomY = other.position.y + other.height;
+
+          if (!snappedX) {
+            if (Math.abs(rawX - other.position.x) < SNAP_THRESHOLD) {
+              adjustedDeltaX = other.position.x - origin.x;
+              snappedX = true;
+              newGuides.push({ type: 'vertical', position: other.position.x, start: Math.min(rawY, other.position.y), end: Math.max(rawY + draggedNode.height, other.position.y + other.height) });
+            } else if (Math.abs(targetCenterX - otherCenterX) < SNAP_THRESHOLD) {
+              adjustedDeltaX = otherCenterX - draggedNode.width / 2 - origin.x;
+              snappedX = true;
+              newGuides.push({ type: 'vertical', position: otherCenterX, start: Math.min(rawY, other.position.y), end: Math.max(rawY + draggedNode.height, other.position.y + other.height) });
+            } else if (Math.abs(targetRightX - otherRightX) < SNAP_THRESHOLD) {
+              adjustedDeltaX = otherRightX - draggedNode.width - origin.x;
+              snappedX = true;
+              newGuides.push({ type: 'vertical', position: otherRightX, start: Math.min(rawY, other.position.y), end: Math.max(rawY + draggedNode.height, other.position.y + other.height) });
+            } else if (Math.abs(rawX - otherRightX) < SNAP_THRESHOLD) {
+              adjustedDeltaX = otherRightX - origin.x;
+              snappedX = true;
+              newGuides.push({ type: 'vertical', position: otherRightX, start: Math.min(rawY, other.position.y), end: Math.max(rawY + draggedNode.height, other.position.y + other.height) });
+            } else if (Math.abs(targetRightX - other.position.x) < SNAP_THRESHOLD) {
+              adjustedDeltaX = other.position.x - draggedNode.width - origin.x;
+              snappedX = true;
+              newGuides.push({ type: 'vertical', position: other.position.x, start: Math.min(rawY, other.position.y), end: Math.max(rawY + draggedNode.height, other.position.y + other.height) });
+            }
+          }
+
+          if (!snappedY) {
+            if (Math.abs(rawY - other.position.y) < SNAP_THRESHOLD) {
+              adjustedDeltaY = other.position.y - origin.y;
+              snappedY = true;
+              newGuides.push({ type: 'horizontal', position: other.position.y, start: Math.min(rawX, other.position.x), end: Math.max(rawX + draggedNode.width, other.position.x + other.width) });
+            } else if (Math.abs(targetCenterY - otherCenterY) < SNAP_THRESHOLD) {
+              adjustedDeltaY = otherCenterY - draggedNode.height / 2 - origin.y;
+              snappedY = true;
+              newGuides.push({ type: 'horizontal', position: otherCenterY, start: Math.min(rawX, other.position.x), end: Math.max(rawX + draggedNode.width, other.position.x + other.width) });
+            } else if (Math.abs(targetBottomY - otherBottomY) < SNAP_THRESHOLD) {
+              adjustedDeltaY = otherBottomY - draggedNode.height - origin.y;
+              snappedY = true;
+              newGuides.push({ type: 'horizontal', position: otherBottomY, start: Math.min(rawX, other.position.x), end: Math.max(rawX + draggedNode.width, other.position.x + other.width) });
+            } else if (Math.abs(rawY - otherBottomY) < SNAP_THRESHOLD) {
+              adjustedDeltaY = otherBottomY - origin.y;
+              snappedY = true;
+              newGuides.push({ type: 'horizontal', position: otherBottomY, start: Math.min(rawX, other.position.x), end: Math.max(rawX + draggedNode.width, other.position.x + other.width) });
+            } else if (Math.abs(targetBottomY - other.position.y) < SNAP_THRESHOLD) {
+              adjustedDeltaY = other.position.y - draggedNode.height - origin.y;
+              snappedY = true;
+              newGuides.push({ type: 'horizontal', position: other.position.y, start: Math.min(rawX, other.position.x), end: Math.max(rawX + draggedNode.width, other.position.x + other.width) });
+            }
+          }
+        }
+      }
     }
+
+    setAlignmentGuides(newGuides);
 
     transformFlowChart((prev) => ({
       ...prev,
       nodes: prev.nodes.map((node) => {
         const origin = dragStartPositions[node.id];
+        if (!origin) return node;
 
-        if (!origin) {
-          return node;
+        let newX = origin.x + adjustedDeltaX;
+        let newY = origin.y + adjustedDeltaY;
+
+        if (newGuides.length === 0) {
+           const snapped = snapPosition({ x: newX, y: newY });
+           newX = snapped.x;
+           newY = snapped.y;
         }
 
         return {
           ...node,
-          position: snapPosition({
-            x: origin.x + delta.x,
-            y: origin.y + delta.y
-          })
+          position: { x: newX, y: newY }
         };
       }),
       updatedAt: new Date()
     }), { saveHistory: false });
-  }, [transformFlowChart]);
+  }, [transformFlowChart, flowChart.nodes]);
 
   const handleNodeDragEnd = useCallback(() => {
     dragStartPositionsRef.current = null;
+    setAlignmentGuides([]);
     endDrag();
   }, [endDrag]);
 
   const handleNodeResizeStart = useCallback((nodeId: string) => {
+    const node = flowChart.nodes.find((item) => item.id === nodeId);
+
+    if (!node || node.locked) {
+      return;
+    }
+
     startDrag(nodeId);
-  }, [startDrag]);
+  }, [flowChart.nodes, startDrag]);
 
   const handleNodeResize = useCallback((nodeId: string, nextBounds: { x: number; y: number; width: number; height: number }) => {
     transformFlowChart((prev) => ({
       ...prev,
       nodes: prev.nodes.map((node) =>
-        node.id === nodeId
+        node.id === nodeId && !node.locked
           ? {
               ...node,
               position: snapPosition({ x: nextBounds.x, y: nextBounds.y }),
@@ -1396,6 +1903,175 @@ export function Editor() {
     setNodeSelection(flowChart.nodes.map((node) => node.id), flowChart.nodes[flowChart.nodes.length - 1]?.id ?? null);
   }, [flowChart.nodes, setNodeSelection]);
 
+  const updateSelectedNodes = useCallback((updater: (nodes: FlowChartNode[]) => FlowChartNode[]) => {
+    if (!selectedNodeIds.length) {
+      return;
+    }
+
+    const selectedIdSet = new Set(selectedNodeIds);
+
+    transformFlowChart((prev) => {
+      const selectedNodes = prev.nodes.filter((node) => selectedIdSet.has(node.id) && !node.locked);
+
+      if (!selectedNodes.length) {
+        return prev;
+      }
+
+      const updatedSelectedNodes = updater(selectedNodes);
+      const updatedMap = new Map(updatedSelectedNodes.map((node) => [node.id, node]));
+
+      return {
+        ...prev,
+        nodes: prev.nodes.map((node) => updatedMap.get(node.id) ?? node),
+        updatedAt: new Date()
+      };
+    });
+  }, [selectedNodeIds, transformFlowChart]);
+
+  const alignSelection = useCallback((mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+    updateSelectedNodes((nodes) => {
+      if (nodes.length < 2) {
+        return nodes;
+      }
+
+      const bounds = getNodeBounds(nodes);
+
+      return nodes.map((node) => {
+        switch (mode) {
+          case 'left':
+            return { ...node, position: snapPosition({ x: bounds.minX, y: node.position.y }) };
+          case 'center':
+            return {
+              ...node,
+              position: snapPosition({ x: bounds.minX + (bounds.maxX - bounds.minX) / 2 - node.width / 2, y: node.position.y })
+            };
+          case 'right':
+            return { ...node, position: snapPosition({ x: bounds.maxX - node.width, y: node.position.y }) };
+          case 'top':
+            return { ...node, position: snapPosition({ x: node.position.x, y: bounds.minY }) };
+          case 'middle':
+            return {
+              ...node,
+              position: snapPosition({ x: node.position.x, y: bounds.minY + (bounds.maxY - bounds.minY) / 2 - node.height / 2 })
+            };
+          case 'bottom':
+            return { ...node, position: snapPosition({ x: node.position.x, y: bounds.maxY - node.height }) };
+          default:
+            return node;
+        }
+      });
+    });
+  }, [updateSelectedNodes]);
+
+  const distributeSelection = useCallback((axis: 'horizontal' | 'vertical') => {
+    updateSelectedNodes((nodes) => {
+      if (nodes.length < 3) {
+        return nodes;
+      }
+
+      const sorted = [...nodes].sort((left, right) =>
+        axis === 'horizontal' ? left.position.x - right.position.x : left.position.y - right.position.y
+      );
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const start = axis === 'horizontal' ? first.position.x : first.position.y;
+      const end = axis === 'horizontal' ? last.position.x : last.position.y;
+      const gap = (end - start) / Math.max(1, sorted.length - 1);
+
+      return sorted.map((node, index) => {
+        const nextValue = start + gap * index;
+        return {
+          ...node,
+          position: snapPosition(
+            axis === 'horizontal'
+              ? { x: nextValue, y: node.position.y }
+              : { x: node.position.x, y: nextValue }
+          )
+        };
+      });
+    });
+  }, [updateSelectedNodes]);
+
+  const tidySelection = useCallback(() => {
+    updateSelectedNodes((nodes) => {
+      const sorted = [...nodes].sort((left, right) => {
+        if (left.position.y === right.position.y) {
+          return left.position.x - right.position.x;
+        }
+
+        return left.position.y - right.position.y;
+      });
+
+      if (!sorted.length) {
+        return sorted;
+      }
+
+      const origin = { x: sorted[0].position.x, y: sorted[0].position.y };
+      const columns = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(sorted.length))));
+
+      return sorted.map((node, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        return {
+          ...node,
+          position: snapPosition({
+            x: origin.x + column * 220,
+            y: origin.y + row * 164
+          })
+        };
+      });
+    });
+  }, [updateSelectedNodes]);
+
+  const groupSelection = useCallback(() => {
+    if (selectedNodeIds.length < 2) {
+      return;
+    }
+
+    const groupId = createId('group');
+    updateSelectedNodes((nodes) => nodes.map((node) => ({ ...node, groupId })));
+  }, [selectedNodeIds.length, updateSelectedNodes]);
+
+  const ungroupSelection = useCallback(() => {
+    updateSelectedNodes((nodes) => nodes.map((node) => ({ ...node, groupId: undefined })));
+  }, [updateSelectedNodes]);
+
+  const moveSelectionInStack = useCallback((direction: 'front' | 'back') => {
+    if (!selectedNodeIds.length) {
+      return;
+    }
+
+    const selectedIdSet = new Set(selectedNodeIds);
+
+    transformFlowChart((prev) => {
+      const maxZ = prev.nodes.reduce((max, node) => Math.max(max, node.zIndex ?? 0), 0);
+      const minZ = prev.nodes.reduce((min, node) => Math.min(min, node.zIndex ?? 0), 0);
+      let indexOffset = 0;
+
+      return {
+        ...prev,
+        nodes: prev.nodes.map((node) => {
+          if (!selectedIdSet.has(node.id) || node.locked) {
+            return node;
+          }
+
+          indexOffset += 1;
+
+          return {
+            ...node,
+            zIndex: direction === 'front' ? maxZ + indexOffset : minZ - indexOffset
+          };
+        }),
+        updatedAt: new Date()
+      };
+    });
+  }, [selectedNodeIds, transformFlowChart]);
+
+  const fitSelection = useCallback(() => {
+    const nodesToFit = flowChart.nodes.filter((node) => selectedNodeIds.includes(node.id));
+    scheduleScrollToNodes(nodesToFit.length ? nodesToFit : flowChart.nodes);
+  }, [flowChart.nodes, scheduleScrollToNodes, selectedNodeIds]);
+
   const nudgeSelectedNodes = useCallback((deltaX: number, deltaY: number) => {
     if (!selectedNodeIds.length) {
       return;
@@ -1406,7 +2082,7 @@ export function Editor() {
     transformFlowChart((prev) => ({
       ...prev,
       nodes: prev.nodes.map((node) =>
-        selectedIdSet.has(node.id)
+        selectedIdSet.has(node.id) && !node.locked
           ? {
               ...node,
               position: snapPosition({
@@ -1423,7 +2099,7 @@ export function Editor() {
   const quickCreateConnectedNode = useCallback((direction: 'up' | 'right' | 'down' | 'left') => {
     const anchorNode = selectedNodeData;
 
-    if (!anchorNode) {
+    if (!anchorNode || anchorNode.locked) {
       return;
     }
 
@@ -1434,18 +2110,25 @@ export function Editor() {
       left: { x: -220, y: 0, fromSide: 'left' as const, toSide: 'right' as const }
     };
     const placement = deltaByDirection[direction];
-    const newNodeId = createId('node');
-    const nextNode: FlowChartNode = {
-      id: newNodeId,
-      type: 'process',
-      text: 'Process Step',
-      position: snapPosition({
-        x: anchorNode.position.x + placement.x,
-        y: anchorNode.position.y + placement.y
-      }),
-      width: getDefaultWidth('process'),
-      height: getDefaultHeight('process')
+    let nextX = anchorNode.position.x + placement.x;
+    let nextY = anchorNode.position.y + placement.y;
+
+    const isOccupied = (x: number, y: number) => {
+      return flowChart.nodes.some(
+        (n) => Math.abs(n.position.x - x) < 50 && Math.abs(n.position.y - y) < 50
+      );
     };
+
+    while (isOccupied(nextX, nextY)) {
+      nextX += placement.x ? Math.sign(placement.x) * 150 : 0;
+      nextY += placement.y ? Math.sign(placement.y) * 120 : 0;
+    }
+
+    const newNodeId = createId('node');
+    const nextNode = createNodeDraft('process', {
+      x: nextX,
+      y: nextY
+    }, { id: newNodeId });
     const nextConnection: Connection = {
       id: createId('connection'),
       from: anchorNode.id,
@@ -1454,17 +2137,61 @@ export function Editor() {
       toSide: placement.toSide,
       type: 'curved',
       startMarker: 'none',
-      endMarker: 'arrow'
+      endMarker: 'arrow',
+      labelPosition: 0.5
     };
 
     transformFlowChart((prev) => ({
       ...prev,
-      nodes: [...prev.nodes, nextNode],
+      nodes: [...prev.nodes, { ...nextNode, zIndex: getNextNodeZIndex(prev.nodes) }],
       connections: [...prev.connections, nextConnection],
       updatedAt: new Date()
     }));
     setNodeSelection([newNodeId], newNodeId);
-  }, [selectedNodeData, setNodeSelection, transformFlowChart]);
+    setLastUsedNodeType('process');
+    setShowCanvasHints(false);
+  }, [createNodeDraft, selectedNodeData, setNodeSelection, transformFlowChart, flowChart.nodes]);
+
+  const setSelectionLocked = useCallback((locked: boolean) => {
+    if (!selectedNodeIds.length) {
+      return;
+    }
+
+    const selectedIdSet = new Set(selectedNodeIds);
+
+    transformFlowChart((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((node) =>
+        selectedIdSet.has(node.id)
+          ? {
+              ...node,
+              locked
+            }
+          : node
+      ),
+      updatedAt: new Date()
+    }));
+  }, [selectedNodeIds, transformFlowChart]);
+
+  const deleteSelectedNodes = useCallback(() => {
+    const removableNodeIds = selectedNodesData.filter((node) => !node.locked).map((node) => node.id);
+
+    if (!removableNodeIds.length) {
+      return;
+    }
+
+    const removableNodeIdSet = new Set(removableNodeIds);
+    transformFlowChart((prev) => ({
+      ...prev,
+      nodes: prev.nodes.filter((node) => !removableNodeIdSet.has(node.id)),
+      connections: prev.connections.filter(
+        (connection) => !removableNodeIdSet.has(connection.from) && !removableNodeIdSet.has(connection.to)
+      ),
+      updatedAt: new Date()
+    }));
+    setSelectedNodeIds((previous) => previous.filter((nodeId) => !removableNodeIdSet.has(nodeId)));
+    setSelectedNode(null);
+  }, [selectedNodesData, setSelectedNode, transformFlowChart]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1474,6 +2201,9 @@ export function Editor() {
         target instanceof HTMLTextAreaElement ||
         target?.isContentEditable;
 
+      if (isTypingTarget && event.key !== 'Escape') {
+        return;
+      }
       if (event.code === 'Space' && !isTypingTarget) {
         event.preventDefault();
         setIsSpacePressed(true);
@@ -1534,14 +2264,66 @@ export function Editor() {
         return;
       }
 
-      if (isTypingTarget) {
-        return;
-      }
+
 
       if (event.key === '/') {
         event.preventDefault();
         setIsCommandMenuOpen(true);
         return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        const normalizedKey = event.key.toLowerCase();
+
+        if (normalizedKey === 'r') {
+          event.preventDefault();
+          addNodeFromPalette('process');
+          return;
+        }
+
+        if (normalizedKey === 'd') {
+          event.preventDefault();
+          addNodeFromPalette('decision');
+          return;
+        }
+
+        if (normalizedKey === 'o') {
+          event.preventDefault();
+          addNodeFromPalette('connector');
+          return;
+        }
+
+        if (normalizedKey === 'l') {
+          event.preventDefault();
+          addNodeFromPalette('annotation');
+          return;
+        }
+
+        if (normalizedKey === 't') {
+          event.preventDefault();
+          addNodeFromPalette('triangle');
+          return;
+        }
+
+        if (normalizedKey === 'f') {
+          event.preventDefault();
+          fitSelection();
+          return;
+        }
+      }
+
+      if (!event.ctrlKey && !event.metaKey && selectedNodeIds.length > 1) {
+        if (event.key === 'g') {
+          event.preventDefault();
+          groupSelection();
+          return;
+        }
+
+        if (event.key === 'G') {
+          event.preventDefault();
+          ungroupSelection();
+          return;
+        }
       }
 
       if (event.altKey && selectedNodeData) {
@@ -1586,18 +2368,7 @@ export function Editor() {
         }
 
         if (selectedNodeIds.length) {
-          const selectedNodeIdSet = new Set(selectedNodeIds);
-
-          transformFlowChart((prev) => ({
-            ...prev,
-            nodes: prev.nodes.filter((node) => !selectedNodeIdSet.has(node.id)),
-            connections: prev.connections.filter(
-              (connection) => !selectedNodeIdSet.has(connection.from) && !selectedNodeIdSet.has(connection.to)
-            ),
-            updatedAt: new Date()
-          }));
-          setSelectedNodeIds([]);
-          setSelectedNode(null);
+          deleteSelectedNodes();
         }
 
         return;
@@ -1637,10 +2408,14 @@ export function Editor() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [
+    addNodeFromPalette,
     clearSelection,
     copySelectionToClipboard,
     deleteConnection,
+    deleteSelectedNodes,
     duplicateSelection,
+    fitSelection,
+    groupSelection,
     handleManualSave,
     handleResetZoom,
     handleZoomIn,
@@ -1653,8 +2428,8 @@ export function Editor() {
     selectedConnectionData,
     selectedNodeData,
     selectedNodeIds,
-    setSelectedNode
-    ,
+    setSelectedNode,
+    ungroupSelection,
     transformFlowChart
   ]);
 
@@ -1678,6 +2453,54 @@ export function Editor() {
       window.removeEventListener('blur', handleWindowBlur);
     };
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (event.key === 'Escape' && presentationMode) {
+        setPresentationMode(false);
+        return;
+      }
+
+      const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key);
+      if (isArrowKey) {
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 1;
+        
+        if (selectedNodeIds.length > 0) {
+          const deltaX = event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0;
+          const deltaY = event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0;
+          
+          transformFlowChart((prev) => ({
+            ...prev,
+            nodes: prev.nodes.map((node) => 
+              selectedNodeIds.includes(node.id)
+                ? { ...node, position: { x: node.position.x + deltaX, y: node.position.y + deltaY } }
+                : node
+            ),
+            updatedAt: new Date()
+          }));
+        } else {
+          const deltaX = event.key === 'ArrowRight' ? 20 : event.key === 'ArrowLeft' ? -20 : 0;
+          const deltaY = event.key === 'ArrowDown' ? 20 : event.key === 'ArrowUp' ? -20 : 0;
+          if (workspaceViewportRef.current) {
+            workspaceViewportRef.current.scrollBy({ left: deltaX, top: deltaY, behavior: 'auto' });
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeIds, transformFlowChart, presentationMode]);
 
   if (loading) {
     return (
@@ -1704,18 +2527,22 @@ export function Editor() {
   return (
     <div className={`h-screen overflow-hidden ${shellClass}`}>
       <div className="flex h-full min-h-0 flex-col xl:flex-row">
-        <EditorToolRail
-          nodeTypes={toolRailNodeTypes}
-          addNodeFromPalette={addNodeFromPalette}
-          onFocusAI={focusAIComposer}
-          onImport={() => fileInputRef.current?.click()}
-          onExportJson={() => handleExport('json')}
-          workspaceTheme={workspaceTheme}
-        />
+        {!isLeftRailCollapsed && !presentationMode && (
+          <EditorToolRail
+            nodeTypes={toolRailNodeTypes}
+            addNodeFromPalette={addNodeFromPalette}
+            onFocusAI={focusAIComposer}
+            onImport={() => fileInputRef.current?.click()}
+            onExportJson={() => handleExport('json')}
+            workspaceTheme={workspaceTheme}
+            onClose={() => setIsLeftRailCollapsed(true)}
+          />
+        )}
 
         <main className={`min-h-0 min-w-0 flex-1 ${mainClass}`}>
           <div className="flex h-full min-w-0 flex-col">
-            <EditorTopBar
+            {!presentationMode && !isTopBarCollapsed && <EditorTopBar
+              onClose={() => setIsTopBarCollapsed(true)}
               flowchartName={flowchartName}
               onNameChange={setFlowchartName}
               onBack={() => navigate('/')}
@@ -1731,30 +2558,102 @@ export function Editor() {
               isLinking={dragConnector !== null}
               workspaceTheme={workspaceTheme}
               onThemeChange={setWorkspaceTheme}
-            />
+              onExportPng={(transparent) => void handleExport('png', { transparent })}
+              onExportSvg={(transparent) => void handleExport('svg', { transparent })}
+              onExportPdf={() => void handleExport('pdf')}
+              onExportJson={() => void handleExport('json')}
+              onPresent={() => setPresentationMode(true)}
+            />}
 
             <div className={`relative min-h-[560px] flex-1 overflow-hidden ${canvasShellClass}`}>
               <EditorCanvasChrome
                 hasNodes={flowChart.nodes.length > 0}
                 connectingNodeLabel={connectingNodeLabel}
                 zoomLabel={zoomLabel}
+                showHints={showCanvasHints}
                 onZoomIn={handleZoomIn}
                 onZoomOut={handleZoomOut}
                 onResetZoom={handleResetZoom}
                 onFitCanvas={() => scheduleScrollToNodes(flowChart.nodes)}
+                onFitSelection={fitSelection}
                 workspaceTheme={workspaceTheme}
+              />
+
+              {isTopBarCollapsed && !presentationMode && (
+                <button
+                  onClick={() => setIsTopBarCollapsed(false)}
+                  className={`absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur ${
+                    isDarkWorkspace
+                      ? 'border-white/10 bg-[#17191d]/92 text-slate-200 hover:border-white/20 hover:bg-[#1b1d22]'
+                      : 'border-white/80 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white'
+                  }`}
+                  title="Show header"
+                >
+                  Show header
+                </button>
+              )}
+
+              {isLeftRailCollapsed && (
+                <button
+                  onClick={() => setIsLeftRailCollapsed(false)}
+                  className={`absolute left-4 top-1/2 z-40 hidden -translate-y-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur xl:inline-flex ${
+                    isDarkWorkspace
+                      ? 'border-white/10 bg-[#17191d]/92 text-slate-200 hover:border-white/20 hover:bg-[#1b1d22]'
+                      : 'border-white/80 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white'
+                  }`}
+                  title="Show tools"
+                >
+                  Show tools
+                </button>
+              )}
+
+              {isRightSidebarCollapsed && (
+                <button
+                  onClick={() => setIsRightSidebarCollapsed(false)}
+                  className={`absolute right-4 top-1/2 z-40 hidden -translate-y-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur xl:inline-flex ${
+                    isDarkWorkspace
+                      ? 'border-white/10 bg-[#17191d]/92 text-slate-200 hover:border-white/20 hover:bg-[#1b1d22]'
+                      : 'border-white/80 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white'
+                  }`}
+                  title="Show inspector"
+                >
+                  Show inspector
+                </button>
+              )}
+
+              <SelectionContextBar
+                isVisible={Boolean(selectedNodeIds.length > 1 && multiToolbarPosition)}
+                x={multiToolbarPosition?.x ?? 0}
+                y={multiToolbarPosition?.y ?? 0}
+                mode="multi"
+                workspaceTheme={workspaceTheme}
+                canUngroup={canUngroupSelection}
+                hasLockedNodes={hasLockedSelection}
+                allLocked={allSelectedNodesLocked}
+                onAlignLeft={() => alignSelection('left')}
+                onAlignTop={() => alignSelection('top')}
+                onDistributeHorizontal={() => distributeSelection('horizontal')}
+                onDistributeVertical={() => distributeSelection('vertical')}
+                onTidy={tidySelection}
+                onGroup={groupSelection}
+                onUngroup={ungroupSelection}
+                onBringForward={() => moveSelectionInStack('front')}
+                onSendBackward={() => moveSelectionInStack('back')}
+                onLock={() => setSelectionLocked(true)}
+                onUnlock={() => setSelectionLocked(false)}
               />
 
               <SelectionContextBar
                 isVisible={Boolean(selectedNodeData && nodeToolbarPosition)}
                 x={nodeToolbarPosition?.x ?? 0}
                 y={nodeToolbarPosition?.y ?? 0}
-                mode="node"
                 workspaceTheme={workspaceTheme}
+                mode="node"
                 nodeType={selectedNodeData?.type ?? 'process'}
+                isLocked={Boolean(selectedNodeData?.locked)}
                 nodeTypes={nodeTypes}
                 onNodeTypeChange={(type) => {
-                  if (selectedNodeData) {
+                  if (selectedNodeData && !selectedNodeData.locked) {
                     updateNode(selectedNodeData.id, { type });
                   }
                 }}
@@ -1766,8 +2665,13 @@ export function Editor() {
                   }
                 }}
                 onDuplicate={handleDuplicateSelectedNode}
-                onDelete={() => {
+                onToggleLock={() => {
                   if (selectedNodeData) {
+                    setSelectionLocked(!selectedNodeData.locked);
+                  }
+                }}
+                onDelete={() => {
+                  if (selectedNodeData && !selectedNodeData.locked) {
                     transformFlowChart((prev) => ({
                       ...prev,
                       nodes: prev.nodes.filter((node) => node.id !== selectedNodeData.id),
@@ -1791,6 +2695,7 @@ export function Editor() {
                 connectionType={selectedConnectionData?.type ?? 'curved'}
                 startMarker={selectedConnectionData?.startMarker ?? 'none'}
                 endMarker={selectedConnectionData?.endMarker ?? 'arrow'}
+                hasManualRoute={Boolean(selectedConnectionData?.waypoints?.length)}
                 onConnectionTypeChange={(type) => {
                   if (selectedConnectionData) {
                     updateConnection(selectedConnectionData.id, { type });
@@ -1809,6 +2714,11 @@ export function Editor() {
                     updateConnection(selectedConnectionData.id, {
                       label: selectedConnectionData.label ?? 'Label'
                     });
+                  }
+                }}
+                onResetRoute={() => {
+                  if (selectedConnectionData) {
+                    updateConnection(selectedConnectionData.id, { waypoints: undefined });
                   }
                 }}
                 onOpenQuickAdd={openQuickAddFromConnection}
@@ -1895,6 +2805,19 @@ export function Editor() {
                       </svg>
                     </div>
 
+                    {alignmentGuides.map((guide, i) => (
+                      <div
+                        key={i}
+                        className="absolute z-20 pointer-events-none"
+                        style={{
+                          backgroundColor: '#ef4444',
+                          ...(guide.type === 'vertical'
+                            ? { left: guide.position, top: guide.start, width: 1, height: guide.end - guide.start }
+                            : { top: guide.position, left: guide.start, height: 1, width: guide.end - guide.start })
+                        }}
+                      />
+                    ))}
+
                     {selectionBox && (
                       <div
                         className="pointer-events-none absolute z-20 rounded-[20px] border-2 border-sky-400/80 bg-sky-400/10"
@@ -1924,6 +2847,9 @@ export function Editor() {
                             connection={connection}
                             fromNode={fromNode}
                             toNode={toNode}
+                            obstacleNodes={flowChart.nodes.filter(
+                              (node) => node.id !== connection.from && node.id !== connection.to
+                            )}
                             isSelected={selectedConnection === connection.id}
                             onSelect={() => {
                               setSelectedConnection(connection.id);
@@ -1933,6 +2859,15 @@ export function Editor() {
                             onDelete={() => {
                               deleteConnection(connection.id);
                               setSelectedConnection(null);
+                            }}
+                            onLabelPositionChange={(labelPosition) => {
+                              updateConnection(connection.id, { labelPosition });
+                            }}
+                            onLabelChange={(label) => {
+                              updateConnection(connection.id, { label });
+                            }}
+                            onWaypointsChange={(waypoints) => {
+                              updateConnection(connection.id, { waypoints });
                             }}
                             workspaceTheme={workspaceTheme}
                           />
@@ -1972,7 +2907,9 @@ export function Editor() {
                     </svg>
 
                     <div className="pointer-events-none absolute inset-0" style={{ zIndex: 10 }}>
-                      {flowChart.nodes.map((node) => (
+                      {[...flowChart.nodes]
+                        .sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0))
+                        .map((node) => (
                         <Node
                           key={node.id}
                           node={node}
@@ -1992,8 +2929,16 @@ export function Editor() {
                           onResizeStart={() => handleNodeResizeStart(node.id)}
                           onResize={(nextBounds) => handleNodeResize(node.id, nextBounds)}
                           onResizeEnd={handleNodeResizeEnd}
-                          onTextChange={(text) => updateNode(node.id, { text })}
+                          onTextChange={(text) => {
+                            if (!node.locked) {
+                              updateNode(node.id, { text });
+                            }
+                          }}
                           onDelete={() => {
+                            if (node.locked) {
+                              return;
+                            }
+
                             transformFlowChart((prev) => ({
                               ...prev,
                               nodes: prev.nodes.filter((item) => item.id !== node.id),
@@ -2013,7 +2958,7 @@ export function Editor() {
                 </div>
               </div>
 
-              <EditorMinimap
+              {!presentationMode && <EditorMinimap
                 nodes={flowChart.nodes}
                 workspaceWidth={workspaceMetrics.width}
                 workspaceHeight={workspaceMetrics.height}
@@ -2024,108 +2969,120 @@ export function Editor() {
                 zoom={zoom}
                 workspaceTheme={workspaceTheme}
                 onNavigate={handleMinimapNavigate}
-              />
+              />}
             </div>
+
+            {presentationMode && (
+              <button
+                onClick={() => setPresentationMode(false)}
+                className="absolute top-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-slate-900/80 px-5 py-2.5 text-sm font-medium text-white shadow-xl backdrop-blur transition hover:bg-slate-800"
+              >
+                <span className="flex h-5 items-center justify-center rounded border border-white/30 bg-white/10 px-1.5 text-[10px] font-bold tracking-widest text-white/70">ESC</span>
+                Exit Presentation
+              </button>
+            )}
           </div>
         </main>
 
-        <EditorSidebar
-          errorMessage={errorMessage}
-          aiDescription={aiDescription}
-          onAiDescriptionChange={setAiDescription}
-          starterPrompts={starterPrompts}
-          onStarterPromptClick={(prompt) => {
-            setAiDescription(prompt);
-            aiTextareaRef.current?.focus();
-          }}
-          onGenerate={handleAIGenerate}
-          isGenerating={isGenerating}
-          aiTextareaRef={aiTextareaRef}
-          nodeTypes={nodeTypes}
-          addNodeFromPalette={addNodeFromPalette}
-          selectedNodeData={selectedNodeData}
-          selectedNodeCount={selectedNodeIds.length}
-          selectedConnectionData={selectedConnectionData}
-          selectedConnectionEndpoints={selectedConnectionEndpoints}
-          updateNodeText={(text) => {
-            if (selectedNodeData) {
-              updateNode(selectedNodeData.id, { text });
-            }
-          }}
-          updateNodeType={(type) => {
-            if (selectedNodeData) {
-              updateNode(selectedNodeData.id, { type });
-            }
-          }}
-          updateNodeStyle={(style) => {
-            if (selectedNodeData) {
-              updateNode(selectedNodeData.id, { style });
-            }
-          }}
-          onDeleteSelectedNode={() => {
-            if (selectedNodeData) {
-              transformFlowChart((prev) => ({
-                ...prev,
-                nodes: prev.nodes.filter((node) => node.id !== selectedNodeData.id),
-                connections: prev.connections.filter(
-                  (connection) => connection.from !== selectedNodeData.id && connection.to !== selectedNodeData.id
-                ),
-                updatedAt: new Date()
-              }));
-              setSelectedNodeIds([]);
-              setSelectedNode(null);
-            }
-          }}
-          onDeleteSelectedNodes={() => {
-            if (selectedNodeIds.length) {
-              const selectedNodeIdSet = new Set(selectedNodeIds);
-
-              transformFlowChart((prev) => ({
-                ...prev,
-                nodes: prev.nodes.filter((node) => !selectedNodeIdSet.has(node.id)),
-                connections: prev.connections.filter(
-                  (connection) => !selectedNodeIdSet.has(connection.from) && !selectedNodeIdSet.has(connection.to)
-                ),
-                updatedAt: new Date()
-              }));
-              setSelectedNodeIds([]);
-              setSelectedNode(null);
-            }
-          }}
-          onDeleteSelectedConnection={() => {
-            if (selectedConnectionData) {
-              deleteConnection(selectedConnectionData.id);
-              setSelectedConnection(null);
-            }
-          }}
-          updateConnectionLabel={(label) => {
-            if (selectedConnectionData) {
-              updateConnection(selectedConnectionData.id, { label: label.trim() ? label : undefined });
-            }
-          }}
-          updateConnectionType={(type) => {
-            if (selectedConnectionData) {
-              updateConnection(selectedConnectionData.id, { type });
-            }
-          }}
-          updateConnectionMarker={(side, marker) => {
-            if (selectedConnectionData) {
-              updateConnection(selectedConnectionData.id, { [side]: marker });
-            }
-          }}
-          updateConnectionColor={(color) => {
-            if (selectedConnectionData) {
-              updateConnection(selectedConnectionData.id, { color });
-            }
-          }}
-          onImport={() => fileInputRef.current?.click()}
-          onExportJson={() => handleExport('json')}
-          onExportPng={() => void handleExport('png')}
-          onExportSvg={() => void handleExport('svg')}
-          onExportPdf={() => void handleExport('pdf')}
-          onClearBoard={handleClearAll}
-          workspaceTheme={workspaceTheme}
-        />
+        {!isRightSidebarCollapsed && !presentationMode && (
+          <EditorSidebar
+            errorMessage={errorMessage}
+            aiDescription={aiDescription}
+            onAiDescriptionChange={setAiDescription}
+            starterPrompts={starterPrompts}
+            onStarterPromptClick={(prompt) => {
+              setAiDescription(prompt);
+              aiTextareaRef.current?.focus();
+            }}
+            onGenerate={handleAIGenerate}
+            isGenerating={isGenerating}
+            aiTextareaRef={aiTextareaRef}
+            nodeTypes={nodeTypes}
+            addNodeFromPalette={addNodeFromPalette}
+            selectedNodeData={selectedNodeData}
+            selectedNodeCount={selectedNodeIds.length}
+            hasLockedSelection={hasLockedSelection}
+            allSelectedNodesLocked={allSelectedNodesLocked}
+            selectedConnectionData={selectedConnectionData}
+            selectedConnectionEndpoints={selectedConnectionEndpoints}
+            updateNodeText={(text) => {
+              if (selectedNodeData && !selectedNodeData.locked) {
+                updateNode(selectedNodeData.id, { text });
+              }
+            }}
+            updateNodeType={(type) => {
+              if (selectedNodeData && !selectedNodeData.locked) {
+                updateNode(selectedNodeData.id, { type });
+              }
+            }}
+            updateNodeStyle={(style) => {
+              if (selectedNodeData && !selectedNodeData.locked) {
+                updateNode(selectedNodeData.id, { style });
+              }
+            }}
+            onSetSelectionLocked={setSelectionLocked}
+            onDeleteSelectedNode={() => {
+              if (selectedNodeData && !selectedNodeData.locked) {
+                transformFlowChart((prev) => ({
+                  ...prev,
+                  nodes: prev.nodes.filter((node) => node.id !== selectedNodeData.id),
+                  connections: prev.connections.filter(
+                    (connection) => connection.from !== selectedNodeData.id && connection.to !== selectedNodeData.id
+                  ),
+                  updatedAt: new Date()
+                }));
+                setSelectedNodeIds([]);
+                setSelectedNode(null);
+              }
+            }}
+            onDeleteSelectedNodes={deleteSelectedNodes}
+            onDeleteSelectedConnection={() => {
+              if (selectedConnectionData) {
+                deleteConnection(selectedConnectionData.id);
+                setSelectedConnection(null);
+              }
+            }}
+            updateConnectionLabel={(label) => {
+              if (selectedConnectionData) {
+                updateConnection(selectedConnectionData.id, { label: label.trim() ? label : undefined });
+              }
+            }}
+            updateConnectionType={(type) => {
+              if (selectedConnectionData) {
+                updateConnection(selectedConnectionData.id, { type });
+              }
+            }}
+            updateConnectionAnimated={(animated) => {
+              if (selectedConnectionData) {
+                updateConnection(selectedConnectionData.id, { animated });
+              }
+            }}
+            updateConnectionMarker={(side, marker) => {
+              if (selectedConnectionData) {
+                updateConnection(selectedConnectionData.id, { [side]: marker });
+              }
+            }}
+            updateConnectionColor={(color) => {
+              if (selectedConnectionData) {
+                updateConnection(selectedConnectionData.id, { color });
+              }
+            }}
+            onResetConnectionRoute={() => {
+              if (selectedConnectionData) {
+                updateConnection(selectedConnectionData.id, { waypoints: undefined });
+              }
+            }}
+            onImport={() => fileInputRef.current?.click()}
+            onExportJson={() => handleExport('json')}
+            onExportPng={() => void handleExport('png')}
+            onExportSvg={() => void handleExport('svg')}
+            onExportPdf={() => void handleExport('pdf')}
+            onClearBoard={handleClearAll}
+            onClose={() => setIsRightSidebarCollapsed(true)}
+            onSaveNodeStyleAsDefault={saveSelectedNodeStyleAsDefault}
+            workspaceTheme={workspaceTheme}
+          />
+        )}
       </div>
 
       <input
@@ -2156,7 +3113,10 @@ function materializeAIFlowChart(result: AIFlowChartResponse): {
     position: { ...node.position },
     style: node.style ? { ...node.style } : undefined
   }));
-  const nodes = ensureWorkspacePadding(rawNodes);
+  const nodes = ensureWorkspacePadding(rawNodes).map((node, index) => ({
+    ...node,
+    zIndex: index + 1
+  }));
 
   const connections = result.connections.flatMap((connection) => {
     const fromNode = nodes[connection.fromIndex];
@@ -2176,6 +3136,7 @@ function materializeAIFlowChart(result: AIFlowChartResponse): {
         type: 'curved' as const,
         startMarker: 'none' as const,
         endMarker: 'arrow' as const,
+        labelPosition: 0.5,
         ...(connection.label ? { label: connection.label } : {})
       }
     ];
@@ -2217,13 +3178,7 @@ function parseImportedFlowChart(
 }
 
 function ensureWorkspacePadding(nodes: FlowChartNode[]): FlowChartNode[] {
-  if (!nodes.length) {
-    return nodes;
-  }
-
-  const bounds = getNodeBounds(nodes);
-  const shiftX = Math.max(0, WORKSPACE_SAFE_LEFT - bounds.minX);
-  const shiftY = Math.max(0, WORKSPACE_SAFE_TOP - bounds.minY);
+  const { shiftX, shiftY } = getWorkspacePaddingShift(nodes);
 
   if (shiftX === 0 && shiftY === 0) {
     return nodes.map((node) => ({
@@ -2241,6 +3196,39 @@ function ensureWorkspacePadding(nodes: FlowChartNode[]): FlowChartNode[] {
     },
     style: node.style ? { ...node.style } : undefined
   }));
+}
+
+function applyWorkspacePadding(nodes: FlowChartNode[], connections: Connection[]) {
+  const { shiftX, shiftY } = getWorkspacePaddingShift(nodes);
+
+  return {
+    nodes: ensureWorkspacePadding(nodes),
+    connections:
+      shiftX === 0 && shiftY === 0
+        ? connections.map((connection) => ({
+            ...connection,
+            waypoints: connection.waypoints?.map((point) => ({ ...point }))
+          }))
+        : connections.map((connection) => ({
+            ...connection,
+            waypoints: connection.waypoints?.map((point) => ({
+              x: point.x + shiftX,
+              y: point.y + shiftY
+            }))
+          }))
+  };
+}
+
+function getWorkspacePaddingShift(nodes: FlowChartNode[]) {
+  if (!nodes.length) {
+    return { shiftX: 0, shiftY: 0 };
+  }
+
+  const bounds = getNodeBounds(nodes);
+  return {
+    shiftX: Math.max(0, WORKSPACE_SAFE_LEFT - bounds.minX),
+    shiftY: Math.max(0, WORKSPACE_SAFE_TOP - bounds.minY)
+  };
 }
 
 function getWorkspaceMetrics(nodes: FlowChartNode[]): { width: number; height: number } {
@@ -2288,7 +3276,7 @@ function getNodeAtPoint(
   point: Position,
   excludedNodeId?: string
 ): FlowChartNode | null {
-  const reversed = [...nodes].reverse();
+  const reversed = [...nodes].sort((left, right) => (right.zIndex ?? 0) - (left.zIndex ?? 0));
 
   return (
     reversed.find((node) => {
@@ -2371,13 +3359,6 @@ function getQuickAddDropPoint(node: FlowChartNode, side: NodeSide): Position {
     default:
       return { x: anchor.x + gap, y: anchor.y };
   }
-}
-
-function getConnectionMidpoint(fromPoint: Position, toPoint: Position): Position {
-  return {
-    x: (fromPoint.x + toPoint.x) / 2,
-    y: (fromPoint.y + toPoint.y) / 2
-  };
 }
 
 function projectWorkspacePoint(
@@ -2517,6 +3498,9 @@ function normalizeImportedNode(
         : `Imported node ${index + 1}`,
     width: toFiniteNumber(node.width, getDefaultWidth(type)),
     height: toFiniteNumber(node.height, getDefaultHeight(type)),
+    ...(typeof node.groupId === 'string' && node.groupId.trim() ? { groupId: node.groupId.trim() } : {}),
+    ...(typeof node.zIndex === 'number' && Number.isFinite(node.zIndex) ? { zIndex: node.zIndex } : {}),
+    ...(typeof node.locked === 'boolean' ? { locked: node.locked } : {}),
     ...(style ? { style } : {})
   };
 }
@@ -2563,6 +3547,19 @@ function normalizeImportedConnection(
       : {}),
     ...(typeof connection.label === 'string' && connection.label.trim()
       ? { label: connection.label.trim() }
+      : {}),
+    ...(typeof connection.labelPosition === 'number' && Number.isFinite(connection.labelPosition)
+      ? { labelPosition: Math.max(0.1, Math.min(0.9, connection.labelPosition)) }
+      : { labelPosition: 0.5 }),
+    ...(Array.isArray(connection.waypoints)
+      ? {
+          waypoints: connection.waypoints
+            .filter((point): point is Record<string, unknown> => isRecord(point))
+            .map((point) => ({
+              x: toFiniteNumber(point.x, 0),
+              y: toFiniteNumber(point.y, 0)
+            }))
+        }
       : {})
   };
 }
@@ -2608,6 +3605,10 @@ function normalizeNodeStyle(style: unknown): FlowChartNode['style'] | undefined 
 
   if (style.textAlign === 'left' || style.textAlign === 'center' || style.textAlign === 'right') {
     normalizedStyle.textAlign = style.textAlign;
+  }
+
+  if (style.rotation === 0 || style.rotation === 90 || style.rotation === 180 || style.rotation === 270) {
+    normalizedStyle.rotation = style.rotation;
   }
 
   return Object.keys(normalizedStyle).length ? normalizedStyle : undefined;
@@ -2726,4 +3727,8 @@ function getDefaultHeight(type: FlowChartNode['type']): number {
     default:
       return 80;
   }
+}
+
+function getNextNodeZIndex(nodes: FlowChartNode[]): number {
+  return nodes.reduce((max, node) => Math.max(max, node.zIndex ?? 0), 0) + 1;
 }

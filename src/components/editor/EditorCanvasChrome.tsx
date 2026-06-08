@@ -1,4 +1,5 @@
-import { Bot, FileJson, Keyboard, Minus, MousePointer2, Move, Play, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Bot, FileJson, Keyboard, Minus, MousePointer2, Move, Play, Plus, X } from 'lucide-react';
 import { CanvasPill, EmptyStateStep } from './WorkspaceBits';
 import type { WorkspaceTheme } from './types';
 
@@ -6,10 +7,12 @@ interface EditorCanvasChromeProps {
   hasNodes: boolean;
   connectingNodeLabel: string | null;
   zoomLabel: string;
+  showHints: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
   onFitCanvas: () => void;
+  onFitSelection: () => void;
   workspaceTheme: WorkspaceTheme;
 }
 
@@ -17,23 +20,27 @@ export function EditorCanvasChrome({
   hasNodes,
   connectingNodeLabel,
   zoomLabel,
+  showHints,
   onZoomIn,
   onZoomOut,
   onResetZoom,
   onFitCanvas,
+  onFitSelection,
   workspaceTheme
 }: EditorCanvasChromeProps) {
   const isDark = workspaceTheme === 'dark';
+  const [isDismissed, setIsDismissed] = useState(false);
 
   return (
     <>
-      <div className="pointer-events-none absolute left-5 top-5 z-30 flex flex-wrap items-center gap-2 md:left-6 md:top-6">
-        <CanvasPill icon={MousePointer2} label="Double-click to add" theme={workspaceTheme} />
-        <CanvasPill icon={MousePointer2} label="Drag empty space to multi-select" theme={workspaceTheme} />
-        <CanvasPill icon={Move} label="Space-drag or middle mouse to pan" theme={workspaceTheme} />
-        <CanvasPill icon={Keyboard} label="Ctrl/Cmd + wheel to zoom" theme={workspaceTheme} />
-        <CanvasPill icon={Bot} label="Alt-drag from a node to connect" theme={workspaceTheme} />
-      </div>
+      {showHints && (
+        <div className="pointer-events-none absolute left-5 top-5 z-30 flex flex-wrap items-center gap-2 md:left-6 md:top-6">
+          <CanvasPill icon={MousePointer2} label="Double-click to add" theme={workspaceTheme} />
+          <CanvasPill icon={Move} label="Drag empty space to multi-select" theme={workspaceTheme} />
+          <CanvasPill icon={Bot} label="Alt-drag from a node to connect" theme={workspaceTheme} />
+          <CanvasPill icon={Keyboard} label="R / D / O / L / T shortcuts" theme={workspaceTheme} />
+        </div>
+      )}
 
       {connectingNodeLabel && (
         <div
@@ -47,7 +54,7 @@ export function EditorCanvasChrome({
         </div>
       )}
 
-      {!hasNodes && (
+      {!hasNodes && !isDismissed && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 py-16" style={{ zIndex: 20 }}>
           <div
             className={`w-full max-w-3xl rounded-[32px] border p-7 backdrop-blur-xl md:p-8 ${
@@ -56,6 +63,12 @@ export function EditorCanvasChrome({
                 : 'border-white/80 bg-white/90 shadow-[0_30px_110px_-58px_rgba(148,163,184,0.6)]'
             }`}
           >
+            <button 
+              onClick={() => setIsDismissed(true)}
+              className="pointer-events-auto absolute top-6 right-6 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            >
+              <X className={`h-5 w-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            </button>
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="max-w-xl">
                 <div
@@ -118,10 +131,12 @@ export function EditorCanvasChrome({
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-5 left-5 z-30 flex flex-wrap items-center gap-2 md:bottom-6 md:left-6">
-        <CanvasPill icon={FileJson} label="Import or export JSON" theme={workspaceTheme} />
-        <CanvasPill icon={Play} label="Start with templates" theme={workspaceTheme} />
-      </div>
+      {showHints && (
+        <div className="pointer-events-none absolute bottom-5 left-5 z-30 flex flex-wrap items-center gap-2 md:bottom-6 md:left-6">
+          <CanvasPill icon={FileJson} label="Import or export JSON" theme={workspaceTheme} />
+          <CanvasPill icon={Play} label="Double-click uses your last shape" theme={workspaceTheme} />
+        </div>
+      )}
 
       <div className="absolute bottom-5 right-5 z-30 flex flex-wrap items-center justify-end gap-3 md:bottom-6 md:right-6">
         <div
@@ -184,6 +199,17 @@ export function EditorCanvasChrome({
             title="Fit flowchart to viewport"
           >
             Fit
+          </button>
+          <button
+            onClick={onFitSelection}
+            className={`inline-flex items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+              isDark
+                ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:border-white/20 hover:bg-white/[0.08]'
+                : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+            }`}
+            title="Fit selected nodes"
+          >
+            Focus
           </button>
         </div>
       </div>

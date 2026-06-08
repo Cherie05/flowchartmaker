@@ -30,6 +30,7 @@ export interface FlowChartNodeStyle {
   fontSize?: number;
   fontWeight?: 'normal' | 'bold';
   textAlign?: 'left' | 'center' | 'right';
+  rotation?: 0 | 90 | 180 | 270;
 }
 
 export interface FlowChartNode {
@@ -40,6 +41,9 @@ export interface FlowChartNode {
   width: number;
   height: number;
   style?: FlowChartNodeStyle;
+  groupId?: string;
+  zIndex?: number;
+  locked?: boolean;
 }
 
 export interface Connection {
@@ -53,6 +57,9 @@ export interface Connection {
   startMarker?: ConnectionMarker;
   endMarker?: ConnectionMarker;
   color?: string;
+  labelPosition?: number;
+  waypoints?: Position[];
+  animated?: boolean;
 }
 
 export interface FlowChart {

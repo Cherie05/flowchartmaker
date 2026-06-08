@@ -32,8 +32,8 @@ export function ConnectorQuickAdd({
     <div
       className="absolute z-50"
       style={{
-        left: x,
-        top: y,
+        left: typeof window !== 'undefined' ? Math.max(160, Math.min(x, window.innerWidth - 160)) : x,
+        top: Math.max(y, 280),
         transform: 'translate(-50%, -115%)'
       }}
     >

@@ -45,3 +45,18 @@
     color: #111827;
   }
 }
+
+@layer utilities {
+  .animate-flowing {
+    animation: flowing-dash 1s linear infinite;
+  }
+  
+  @keyframes flowing-dash {
+    from {
+      stroke-dashoffset: 24;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+}

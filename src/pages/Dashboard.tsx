@@ -5,23 +5,27 @@ import {
   ArrowRight,
   Clock3,
   Copy,
-  FileText,
-  HardDrive,
-  Layers3,
+  LayoutTemplate,
   Loader,
-  PencilLine,
   Plus,
-  Sparkles,
-  Trash2
+  Trash2,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { getErrorMessage } from '../lib/errors';
+import { ConfirmModal } from '../components/ConfirmModal';
 import type { FlowChartRecord } from '../types/flowChart';
+import { CustomCursor } from '../components/CustomCursor';
+import { Logo } from '../components/Logo';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [flowcharts, setFlowcharts] = useState<FlowChartRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showWarning, setShowWarning] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const userName = localStorage.getItem('user_name') || 'Creator';
 
   const loadFlowcharts = useCallback(async () => {
     try {
@@ -43,7 +47,7 @@ export function Dashboard() {
   const handleCreate = async () => {
     try {
       const newFlowchart = await flowchartService.createFlowchart({
-        name: 'New Flowchart',
+        name: 'Untitled Flowchart',
         nodes: [],
         connections: []
       });
@@ -54,13 +58,18 @@ export function Dashboard() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this flowchart?')) return;
+    setDeletingId(id);
+  };
 
+  const confirmDelete = async () => {
+    if (!deletingId) return;
     try {
-      await flowchartService.deleteFlowchart(id);
-      setFlowcharts(currentFlowcharts => currentFlowcharts.filter(flowchart => flowchart.id !== id));
+      await flowchartService.deleteFlowchart(deletingId);
+      setFlowcharts(currentFlowcharts => currentFlowcharts.filter(flowchart => flowchart.id !== deletingId));
     } catch (error) {
       setError(getErrorMessage(error, 'Failed to delete the flowchart.'));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -89,212 +98,154 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,190,118,0.2),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(125,173,255,0.18),transparent_24%),linear-gradient(180deg,#f9f6ef_0%,#f4f1e8_100%)]">
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <section className="rounded-[36px] border border-white/80 bg-white/82 p-6 shadow-[0_30px_110px_-60px_rgba(15,23,42,0.45)] backdrop-blur-xl sm:p-8">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="mb-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                <span className="rounded-full bg-orange-100 px-3 py-1 text-orange-900">Whimsical-inspired</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Board-first UX</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">Local mode</span>
-              </div>
+    <div className="min-h-screen bg-[#efe8dc] text-slate-900 font-sans cursor-none">
+      <CustomCursor />
+      
+      {/* Minimalist Header */}
+      <header className="border-b border-slate-300 bg-white/50 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
+          <Logo />
+          <div className="flex items-center gap-4">
+             <span className="text-sm font-medium text-slate-500">Welcome, {userName}</span>
+          </div>
+        </div>
+      </header>
 
-              <div className="flex items-start gap-4">
-                <div className="hidden h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-900/15 sm:flex">
-                  <Layers3 className="h-6 w-6" />
-                </div>
-                <div>
-                  <h1 className="text-4xl leading-tight text-slate-900 sm:text-5xl">
-                    Map ideas in a calmer, canvas-first workspace.
-                  </h1>
-                  <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                    Build flows from scratch or let AI draft the first pass, then refine everything in a cleaner board experience inspired by Whimsical.
-                  </p>
-                </div>
+      <main className="max-w-7xl mx-auto px-8 py-12">
+        {/* Warning Banner */}
+        {showWarning && (
+          <div className="mb-12 relative overflow-hidden rounded-2xl bg-[#fff9ed] border border-[#ffdb99] p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-6 w-6 text-[#d97706]" />
               </div>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm">
-                <HardDrive className="h-4 w-4 text-slate-500" />
-                Saved in this browser
+              <div className="flex-1 pr-8">
+                <h3 className="text-lg font-bold text-[#92400e] uppercase tracking-tight mb-1">
+                  Local Storage Privacy Notice
+                </h3>
+                <p className="text-[#b45309] font-medium">
+                  To ensure maximum privacy, FlowForge currently stores all your flowchart data directly in your browser's Local Storage.
+                  <strong className="block mt-1 font-bold text-[#92400e]">
+                    WARNING: If you log in on a different device, or clear your browser data/cache, you will lose access to these flowcharts. Please export your critical data regularly.
+                  </strong>
+                </p>
               </div>
-              <button
-                onClick={handleCreate}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800"
+              <button 
+                onClick={() => setShowWarning(false)}
+                className="absolute top-6 right-6 text-[#d97706] hover:text-[#92400e] transition-colors"
               >
-                <Plus className="h-4 w-4" />
-                New board
-                <ArrowRight className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
           </div>
+        )}
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            <StatCard
-              icon={Layers3}
-              label="Boards"
-              value={`${flowcharts.length}`}
-              detail={flowcharts.length === 1 ? 'One saved workspace' : 'Saved workspaces ready'}
-            />
-            <StatCard
-              icon={Sparkles}
-              label="Start faster"
-              value="AI drafts"
-              detail="Generate a first version, then refine on the canvas."
-            />
-            <StatCard
-              icon={HardDrive}
-              label="Storage"
-              value="Local"
-              detail="Your boards stay in browser storage on this device."
-            />
-          </div>
-        </section>
-
-        <section className="mt-8">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Workspace boards</p>
-              <h2 className="mt-2 text-3xl text-slate-900">Pick up where you left off</h2>
-            </div>
-            <p className="text-sm text-slate-600">
-              {flowcharts.length} {flowcharts.length === 1 ? 'board' : 'boards'} available
+        {/* Title & Action */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+          <div>
+            <h1 className="text-5xl font-black uppercase tracking-tighter mb-2">Your Boards</h1>
+            <p className="text-lg text-slate-600 font-light">
+              Manage and edit your locally saved flowcharts.
             </p>
           </div>
+          <button
+            onClick={handleCreate}
+            className="group inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-8 py-4 text-sm font-bold text-white transition-all hover:bg-indigo-600 active:scale-95"
+          >
+            <Plus className="h-5 w-5" />
+            New Board
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </button>
+        </div>
 
-          {error && (
-            <div className="mb-5 rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="mb-8 rounded-xl bg-red-50 p-4 text-red-600 border border-red-200">
+            {error}
+          </div>
+        )}
 
-          {loading ? (
-            <div className="flex items-center justify-center rounded-[32px] border border-white/80 bg-white/80 px-6 py-24 shadow-[0_24px_90px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl">
-              <div className="flex items-center gap-4 rounded-[24px] border border-slate-200 bg-[#fbfbf8] px-5 py-4">
-                <Loader className="h-5 w-5 animate-spin text-orange-500" />
-                <span className="text-sm font-medium text-slate-700">Loading boards...</span>
-              </div>
-            </div>
-          ) : flowcharts.length === 0 ? (
-            <div className="rounded-[32px] border border-white/80 bg-white/82 px-6 py-16 text-center shadow-[0_24px_90px_-48px_rgba(15,23,42,0.38)] backdrop-blur-xl sm:px-10">
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-orange-100 text-orange-600">
-                <FileText className="h-9 w-9" />
-              </div>
-              <h3 className="mt-6 text-3xl text-slate-900">No boards yet</h3>
-              <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-slate-600">
-                Create your first workspace to start mapping flows, decisions, and ideas in the new board experience.
-              </p>
-              <button
-                onClick={handleCreate}
-                className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800"
+        {/* Flowcharts Grid */}
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader className="h-8 w-8 animate-spin text-slate-400" />
+          </div>
+        ) : flowcharts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 px-4 text-center border-2 border-dashed border-slate-300 rounded-3xl bg-white/50">
+            <LayoutTemplate className="h-16 w-16 text-slate-300 mb-6" />
+            <h3 className="text-2xl font-bold text-slate-900 mb-2">No boards yet</h3>
+            <p className="text-slate-500 max-w-sm mb-8">
+              Create your first flowchart to start mapping out your ideas visually.
+            </p>
+            <button
+              onClick={handleCreate}
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-indigo-600 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Create First Board
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {flowcharts.map((flowchart) => (
+              <div
+                key={flowchart.id}
+                className="group relative flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-indigo-200"
               >
-                <Plus className="h-4 w-4" />
-                Create board
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {flowcharts.map((flowchart) => (
-                <article
-                  key={flowchart.id}
-                  className="group rounded-[30px] border border-white/80 bg-white/86 p-5 shadow-[0_24px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-[0_30px_110px_-52px_rgba(15,23,42,0.48)]"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-                        <Layers3 className="h-3.5 w-3.5" />
-                        {flowchart.nodes?.length || 0} nodes
-                      </div>
-                      <h3 className="mt-4 line-clamp-2 text-2xl leading-tight text-slate-900">
-                        {flowchart.name}
-                      </h3>
-                    </div>
-
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
-                      <Sparkles className="h-5 w-5" />
-                    </div>
+                <div className="mb-4 flex items-start justify-between">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#efe8dc] text-slate-900">
+                    <LayoutTemplate className="h-6 w-6" />
                   </div>
-
-                  <div className="mt-5 rounded-[24px] border border-slate-200 bg-[#fbfbf8] p-4">
-                    <div className="flex items-center justify-between text-sm text-slate-600">
-                      <span className="font-medium text-slate-900">Connections</span>
-                      <span>{flowchart.connections?.length || 0}</span>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-orange-400 via-sky-400 to-emerald-400"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            18 + (flowchart.nodes?.length || 0) * 8 + (flowchart.connections?.length || 0) * 4
-                          )}%`
-                        }}
-                      />
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
-                      <Clock3 className="h-4 w-4" />
-                      Updated {formatDate(flowchart.updated_at)}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex items-center gap-2">
-                    <button
-                      onClick={() => navigate(`/editor/${flowchart.id}`)}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      <PencilLine className="h-4 w-4" />
-                      Open board
-                    </button>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       onClick={() => handleDuplicate(flowchart.id)}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300"
+                      className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                       title="Duplicate"
                     >
                       <Copy className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(flowchart.id)}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 transition hover:-translate-y-0.5 hover:bg-rose-100"
+                      className="rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
-  );
-}
+                </div>
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  detail
-}: {
-  icon: typeof Layers3;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-white/80 bg-[#fbfbf8] p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
-        </div>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{detail}</p>
+                <h3 className="mb-2 text-xl font-bold text-slate-900 truncate">
+                  {flowchart.name}
+                </h3>
+                
+                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    {formatDate(flowchart.updatedAt)}
+                  </div>
+                  
+                  <button
+                    onClick={() => navigate(`/editor/${flowchart.id}`)}
+                    className="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                  >
+                    Edit Board
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <ConfirmModal
+        isOpen={deletingId !== null}
+        title="Delete Board"
+        message="Are you absolutely sure you want to delete this flowchart? This action cannot be undone and your data will be permanently lost."
+        confirmText="Delete Forever"
+        cancelText="Cancel"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeletingId(null)}
+      />
     </div>
   );
 }
