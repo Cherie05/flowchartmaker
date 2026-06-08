@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { CustomCursor } from '../components/CustomCursor';
 import { Logo } from '../components/Logo';
+import { supabase } from '../lib/supabase';
 
 export function AuthPage() {
   const navigate = useNavigate();
