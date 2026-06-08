@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "npm run build && wrangler dev",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@studio-freight/lenis": "^1.0.42",
@@ -25,6 +26,7 @@
     "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.40.0",
     "@eslint/js": "^9.9.1",
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -49,6 +51,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.60.1",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "wrangler": "^4.98.0"
   }
 }
