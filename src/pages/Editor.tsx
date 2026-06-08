@@ -2549,7 +2549,6 @@ export function Editor() {
       <FeedbackModal 
         isOpen={showFeedbackModal} 
         onClose={() => setShowFeedbackModal(false)} 
-        flowchartId={id} 
       />
       <div className="flex h-full min-h-0 flex-col xl:flex-row">
         {!isLeftRailCollapsed && !presentationMode && (

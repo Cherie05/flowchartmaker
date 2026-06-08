@@ -5,10 +5,9 @@ import { supabase } from '../lib/supabase';
 interface FeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
-  flowchartId?: string;
 }
 
-export function FeedbackModal({ isOpen, onClose, flowchartId }: FeedbackModalProps) {
+export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
   const [rating, setRating] = useState<number>(0);
   const [hoveredRating, setHoveredRating] = useState<number>(0);
   const [message, setMessage] = useState('');
@@ -23,9 +22,11 @@ export function FeedbackModal({ isOpen, onClose, flowchartId }: FeedbackModalPro
 
     setIsSubmitting(true);
     try {
+      const userEmail = localStorage.getItem('user_email') || 'anonymous';
+      
       const { error } = await supabase
         .from('feedbacks')
-        .insert([{ rating, message, flowchart_id: flowchartId }]);
+        .insert([{ rating, message, user_email: userEmail }]);
 
       if (error) throw error;
       
