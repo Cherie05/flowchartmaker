@@ -220,7 +220,7 @@ export function Dashboard() {
                 <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                     <Clock3 className="h-3.5 w-3.5" />
-                    {formatDate(flowchart.updatedAt)}
+                    {formatDate(flowchart.updated_at)}
                   </div>
                   
                   <button
