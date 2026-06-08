@@ -37,9 +37,10 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
         setRating(0);
         setMessage('');
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error submitting feedback:', err);
-      alert('Failed to submit feedback: ' + (err.message || JSON.stringify(err)));
+      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
+      alert('Failed to submit feedback: ' + errorMessage);
     } finally {
       setIsSubmitting(false);
     }
