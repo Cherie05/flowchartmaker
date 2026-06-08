@@ -115,11 +115,11 @@ export function LandingPage() {
 
         {/* Hero Section */}
         <section className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 pt-32 pb-24 text-center md:px-12">
-          <motion.div style={{ y: yText, opacity: opacityFade }} className="flex flex-col items-center w-full max-w-[90vw]">
+          <motion.div style={{ y: yText, opacity: opacityFade }} className="flex flex-col items-center w-full max-w-[90vw] 2xl:max-w-[1400px]">
 
             <div className="overflow-hidden mb-12">
               <motion.h1
-                className="text-[12vw] font-black tracking-tighter leading-[0.85] uppercase"
+                className="text-[12vw] 2xl:text-[200px] font-black tracking-tighter leading-[0.85] uppercase"
               >
                 {'Diagram at'.split(' ').map((word, i) => (
                   <span key={`l1-${i}`} className="inline-block overflow-hidden pb-4">
@@ -176,7 +176,7 @@ export function LandingPage() {
 
         {/* Features Showcase */}
         <section className="relative z-20 bg-[#f7f3ea] py-32 md:py-48 border-t border-slate-300">
-          <div className="max-w-[90vw] mx-auto">
+          <div className="max-w-[90vw] 2xl:max-w-[1400px] mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 100 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -184,7 +184,7 @@ export function LandingPage() {
               transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
               className="mb-32 flex flex-col md:flex-row justify-between items-end gap-8"
             >
-              <h2 className="text-6xl md:text-[8vw] font-black tracking-tighter leading-[0.9] uppercase">
+              <h2 className="text-6xl md:text-[8vw] 2xl:text-[140px] font-black tracking-tighter leading-[0.9] uppercase">
                 Intelligent<br />
                 <span className="text-slate-300">Invisible</span>
               </h2>
