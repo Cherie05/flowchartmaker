@@ -11,11 +11,22 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-motion': ['framer-motion'],
-          'vendor-supabase': ['@supabase/supabase-js'],
-          'vendor-export': ['jspdf', 'html2canvas'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'vendor-react';
+            }
+            if (id.includes('framer-motion')) {
+              return 'vendor-motion';
+            }
+            if (id.includes('@supabase/supabase-js')) {
+              return 'vendor-supabase';
+            }
+            if (id.includes('jspdf') || id.includes('html2canvas')) {
+              return 'vendor-export';
+            }
+            return 'vendor'; // Default chunk for other node_modules
+          }
         },
       },
     },
