@@ -1,4 +1,5 @@
-import type { Connection, FlowChartNode, NodeSide } from '../types/flowChart';
+import { buildConnectionGeometry } from './connectionRouting';
+import type { Connection, FlowChartNode } from '../types/flowChart';
 
 const EXPORT_PADDING = 140;
 
@@ -8,7 +9,7 @@ export interface ExportSnapshot {
   svg: string;
 }
 
-export function buildFlowchartExport(nodes: FlowChartNode[], connections: Connection[]): ExportSnapshot {
+export function buildFlowchartExport(nodes: FlowChartNode[], connections: Connection[], options?: { transparent?: boolean }): ExportSnapshot {
   const bounds = getExportBounds(nodes);
   const width = Math.max(720, Math.round(bounds.maxX - bounds.minX + EXPORT_PADDING * 2));
   const height = Math.max(480, Math.round(bounds.maxY - bounds.minY + EXPORT_PADDING * 2));
@@ -28,6 +29,13 @@ export function buildFlowchartExport(nodes: FlowChartNode[], connections: Connec
     })
     .join('');
 
+  const backgroundRects = options?.transparent
+    ? ''
+    : `
+      <rect width="${width}" height="${height}" fill="#f8f4eb" />
+      <rect width="${width}" height="${height}" fill="url(#export-grid)" />
+    `;
+
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
       <defs>
@@ -36,8 +44,7 @@ export function buildFlowchartExport(nodes: FlowChartNode[], connections: Connec
         </pattern>
         ${defs}
       </defs>
-      <rect width="${width}" height="${height}" fill="#f8f4eb" />
-      <rect width="${width}" height="${height}" fill="url(#export-grid)" />
+      ${backgroundRects}
       ${connections.map((connection) => renderConnection(connection, nodes, offsetX, offsetY)).join('')}
       ${nodes.map((node) => renderNode(node, offsetX, offsetY)).join('')}
     </svg>
@@ -84,15 +91,18 @@ function renderConnection(
     return '';
   }
 
-  const fromPoint = getConnectionPoint(fromNode, connection.fromSide, offsetX, offsetY);
-  const toPoint = getConnectionPoint(toNode, connection.toSide, offsetX, offsetY);
-  const path = buildConnectionPath(fromPoint, toPoint, connection);
+  const geometry = buildConnectionGeometry({
+    connection: offsetConnection(connection, offsetX, offsetY),
+    fromNode: offsetNode(fromNode, offsetX, offsetY),
+    toNode: offsetNode(toNode, offsetX, offsetY),
+    obstacleNodes: nodes
+      .filter((node) => node.id !== fromNode.id && node.id !== toNode.id)
+      .map((node) => offsetNode(node, offsetX, offsetY))
+  });
+  const path = geometry.path;
   const color = connection.color ?? '#64748b';
   const markerId = `marker-${connection.id}`;
-  const midPoint = {
-    x: (fromPoint.x + toPoint.x) / 2,
-    y: (fromPoint.y + toPoint.y) / 2
-  };
+  const midPoint = geometry.labelPoint;
   const labelWidth = connection.label ? Math.max(58, connection.label.length * 6.5 + 24) : 0;
 
   return `
@@ -227,64 +237,24 @@ function renderText(
     .join('');
 }
 
-function getConnectionPoint(node: FlowChartNode, side: NodeSide, offsetX: number, offsetY: number) {
-  const x = node.position.x + offsetX;
-  const y = node.position.y + offsetY;
-
-  switch (side) {
-    case 'top':
-      return { x: x + node.width / 2, y };
-    case 'right':
-      return { x: x + node.width, y: y + node.height / 2 };
-    case 'bottom':
-      return { x: x + node.width / 2, y: y + node.height };
-    case 'left':
-      return { x, y: y + node.height / 2 };
-    default:
-      return { x: x + node.width / 2, y: y + node.height };
-  }
+function offsetNode(node: FlowChartNode, offsetX: number, offsetY: number): FlowChartNode {
+  return {
+    ...node,
+    position: {
+      x: node.position.x + offsetX,
+      y: node.position.y + offsetY
+    }
+  };
 }
 
-function buildConnectionPath(
-  fromPoint: { x: number; y: number },
-  toPoint: { x: number; y: number },
-  connection: Connection
-): string {
-  const type = connection.type ?? 'curved';
-  const dx = toPoint.x - fromPoint.x;
-  const dy = toPoint.y - fromPoint.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  const controlOffset = Math.min(distance / 3, 80);
-
-  if (type === 'straight') {
-    return `M ${fromPoint.x} ${fromPoint.y} L ${toPoint.x} ${toPoint.y}`;
-  }
-
-  if (type === 'elbow') {
-    if (connection.fromSide === 'left' || connection.fromSide === 'right') {
-      const midX = fromPoint.x + (toPoint.x - fromPoint.x) / 2;
-      return `M ${fromPoint.x} ${fromPoint.y} L ${midX} ${fromPoint.y} L ${midX} ${toPoint.y} L ${toPoint.x} ${toPoint.y}`;
-    }
-
-    const midY = fromPoint.y + (toPoint.y - fromPoint.y) / 2;
-    return `M ${fromPoint.x} ${fromPoint.y} L ${fromPoint.x} ${midY} L ${toPoint.x} ${midY} L ${toPoint.x} ${toPoint.y}`;
-  }
-
-  if (connection.fromSide === 'bottom' && connection.toSide === 'top') {
-    return `M ${fromPoint.x} ${fromPoint.y} C ${fromPoint.x} ${fromPoint.y + controlOffset} ${toPoint.x} ${toPoint.y - controlOffset} ${toPoint.x} ${toPoint.y}`;
-  }
-
-  if (connection.fromSide === 'right' && connection.toSide === 'left') {
-    return `M ${fromPoint.x} ${fromPoint.y} C ${fromPoint.x + controlOffset} ${fromPoint.y} ${toPoint.x - controlOffset} ${toPoint.y} ${toPoint.x} ${toPoint.y}`;
-  }
-
-  if (connection.fromSide === 'left' && connection.toSide === 'right') {
-    return `M ${fromPoint.x} ${fromPoint.y} C ${fromPoint.x - controlOffset} ${fromPoint.y} ${toPoint.x + controlOffset} ${toPoint.y} ${toPoint.x} ${toPoint.y}`;
-  }
-
-  const midX = (fromPoint.x + toPoint.x) / 2;
-  const midY = (fromPoint.y + toPoint.y) / 2;
-  return `M ${fromPoint.x} ${fromPoint.y} Q ${midX} ${midY} ${toPoint.x} ${toPoint.y}`;
+function offsetConnection(connection: Connection, offsetX: number, offsetY: number): Connection {
+  return {
+    ...connection,
+    waypoints: connection.waypoints?.map((point) => ({
+      x: point.x + offsetX,
+      y: point.y + offsetY
+    }))
+  };
 }
 
 function getExportBounds(nodes: FlowChartNode[]) {

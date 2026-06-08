@@ -1,4 +1,4 @@
-import { Bot, FileJson, MousePointer2, Upload } from 'lucide-react';
+import { Bot, FileJson, MousePointer2, Upload, ChevronLeft } from 'lucide-react';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
 interface EditorToolRailProps {
@@ -8,6 +8,7 @@ interface EditorToolRailProps {
   onImport: () => void;
   onExportJson: () => void;
   workspaceTheme: WorkspaceTheme;
+  onClose: () => void;
 }
 
 export function EditorToolRail({
@@ -16,7 +17,8 @@ export function EditorToolRail({
   onFocusAI,
   onImport,
   onExportJson,
-  workspaceTheme
+  workspaceTheme,
+  onClose
 }: EditorToolRailProps) {
   const isDark = workspaceTheme === 'dark';
   const compactLabels: Record<WorkspaceNodeType['type'], string> = {
@@ -42,6 +44,13 @@ export function EditorToolRail({
     >
       <div className="flex h-full flex-col px-3 py-4">
         <div className="mb-4 flex flex-col items-center gap-3">
+          <button 
+            onClick={onClose}
+            className={`p-2 rounded-full mb-2 transition ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-black/5 text-slate-500'}`}
+            title="Hide tools"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
           <div
             className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-lg ${
               isDark

@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import { Bot, Circle, Download, FileJson, Keyboard, Loader, MousePointer2, Square, Trash2, Upload } from 'lucide-react';
+import { Bot, Circle, Download, FileJson, Keyboard, Loader, Lock, MousePointer2, Square, Trash2, Unlock, Upload, ChevronRight } from 'lucide-react';
 import type { Connection, ConnectionMarker, ConnectionType, FlowChartNode } from '../../types/flowChart';
 import { SelectionMetric, ShortcutRow } from './WorkspaceBits';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
@@ -8,8 +8,6 @@ interface EditorSidebarProps {
   errorMessage: string;
   aiDescription: string;
   onAiDescriptionChange: (value: string) => void;
-  starterPrompts: string[];
-  onStarterPromptClick: (prompt: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
   aiTextareaRef: Ref<HTMLTextAreaElement>;
@@ -17,6 +15,8 @@ interface EditorSidebarProps {
   addNodeFromPalette: (type: WorkspaceNodeType['type']) => void;
   selectedNodeData: FlowChartNode | null;
   selectedNodeCount: number;
+  hasLockedSelection: boolean;
+  allSelectedNodesLocked: boolean;
   selectedConnectionData: Connection | null;
   selectedConnectionEndpoints: {
     from: FlowChartNode | null;
@@ -25,6 +25,8 @@ interface EditorSidebarProps {
   updateNodeText: (text: string) => void;
   updateNodeType: (type: FlowChartNode['type']) => void;
   updateNodeStyle: (style: Partial<NonNullable<FlowChartNode['style']>>) => void;
+  onSetSelectionLocked: (locked: boolean) => void;
+  onSaveNodeStyleAsDefault: () => void;
   onDeleteSelectedNode: () => void;
   onDeleteSelectedNodes: () => void;
   onDeleteSelectedConnection: () => void;
@@ -32,6 +34,8 @@ interface EditorSidebarProps {
   updateConnectionType: (type: ConnectionType) => void;
   updateConnectionMarker: (side: 'startMarker' | 'endMarker', marker: ConnectionMarker) => void;
   updateConnectionColor: (color: string) => void;
+  updateConnectionAnimated: (animated: boolean) => void;
+  onResetConnectionRoute: () => void;
   onImport: () => void;
   onExportJson: () => void;
   onExportPng: () => void;
@@ -45,8 +49,6 @@ export function EditorSidebar({
   errorMessage,
   aiDescription,
   onAiDescriptionChange,
-  starterPrompts,
-  onStarterPromptClick,
   onGenerate,
   isGenerating,
   aiTextareaRef,
@@ -54,11 +56,15 @@ export function EditorSidebar({
   addNodeFromPalette,
   selectedNodeData,
   selectedNodeCount,
+  hasLockedSelection,
+  allSelectedNodesLocked,
   selectedConnectionData,
   selectedConnectionEndpoints,
   updateNodeText,
   updateNodeType,
   updateNodeStyle,
+  onSetSelectionLocked,
+  onSaveNodeStyleAsDefault,
   onDeleteSelectedNode,
   onDeleteSelectedNodes,
   onDeleteSelectedConnection,
@@ -66,15 +72,20 @@ export function EditorSidebar({
   updateConnectionType,
   updateConnectionMarker,
   updateConnectionColor,
+  updateConnectionAnimated,
+  onResetConnectionRoute,
   onImport,
   onExportJson,
   onExportPng,
   onExportSvg,
   onExportPdf,
   onClearBoard,
-  workspaceTheme
+  workspaceTheme,
+  onClose
 }: EditorSidebarProps) {
   const isDark = workspaceTheme === 'dark';
+  const isNodeLocked = Boolean(selectedNodeData?.locked);
+  const hasManualConnectionRoute = Boolean(selectedConnectionData?.waypoints?.length);
   const asideClass = isDark
     ? 'xl:border-white/8 xl:bg-[#151517]'
     : 'xl:border-slate-200/80 xl:bg-[#f4efe6]';
@@ -91,13 +102,16 @@ export function EditorSidebar({
   const softCardClass = isDark ? 'border-white/10 bg-[#131419]' : 'border-slate-200 bg-[#fcfaf6]';
   const softTextClass = isDark ? 'text-slate-400' : 'text-slate-600';
   const softStrongTextClass = isDark ? 'text-slate-100' : 'text-slate-900';
-  const starterPromptClass = isDark
-    ? 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-orange-400/30 hover:bg-orange-500/10 hover:text-orange-100'
-    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700';
 
   return (
     <aside className={`w-full shrink-0 xl:flex xl:h-full xl:w-[360px] xl:min-h-0 xl:border-l ${asideClass}`}>
       <div className="space-y-4 p-4 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-3">
+        <div className="flex items-center justify-between">
+          <h2 className={`font-bold text-lg ${sectionTitleClass}`}>Properties</h2>
+          <button onClick={onClose} className={`rounded-full p-2 transition ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="Hide inspector">
+            <ChevronRight className={`h-5 w-5 ${sectionKickerClass}`} />
+          </button>
+        </div>
         {errorMessage && (
           <div
             className={`rounded-[24px] border px-4 py-3 text-sm shadow-sm ${
@@ -126,30 +140,23 @@ export function EditorSidebar({
             ref={aiTextareaRef}
             value={aiDescription}
             onChange={(e) => onAiDescriptionChange(e.target.value)}
-            placeholder="Describe the workflow you want to map. Example: a customer support escalation process with triage, handoff, approval, and closure."
-            className={`min-h-[112px] w-full rounded-[20px] border px-4 py-3 text-sm leading-6 outline-none transition focus:ring-2 ${fieldClass}`}
-            disabled={isGenerating}
+            placeholder="Describe a process (e.g., 'E-commerce checkout', 'User registration')"
+            className={`min-h-[112px] w-full rounded-[20px] border px-4 py-3 text-sm leading-6 outline-none transition ${fieldClass}`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                onGenerate();
+              }
+            }}
           />
-
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-            {starterPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                onClick={() => onStarterPromptClick(prompt)}
-                className={`rounded-2xl border px-3 py-2 text-left text-xs font-medium leading-5 transition ${starterPromptClass}`}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
 
           <button
             onClick={onGenerate}
-            disabled={!aiDescription.trim() || isGenerating}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[20px] bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-500/20 transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            disabled={isGenerating || !aiDescription.trim()}
+            className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-semibold text-white shadow-xl transition-all duration-200 ${isGenerating || !aiDescription.trim() ? 'bg-orange-400 opacity-50 cursor-not-allowed' : 'bg-orange-500 hover:-translate-y-0.5 hover:bg-orange-400 hover:shadow-[0_20px_40px_-20px_rgba(249,115,22,0.4)] active:translate-y-0 active:shadow-none'}`}
           >
             {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            {isGenerating ? 'Generating board...' : 'Generate with AI'}
+            {isGenerating ? 'Generating...' : 'Generate AI Draft'}
           </button>
         </section>
 
@@ -204,6 +211,19 @@ export function EditorSidebar({
 
           {selectedNodeData ? (
             <div className="space-y-4">
+              <div className={`inline-flex items-center gap-2 rounded-[18px] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] ${
+                isNodeLocked
+                  ? isDark
+                    ? 'border-amber-400/25 bg-amber-500/10 text-amber-200'
+                    : 'border-amber-200 bg-amber-50 text-amber-700'
+                  : isDark
+                    ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              }`}>
+                {isNodeLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                {isNodeLocked ? 'Locked node' : 'Editable node'}
+              </div>
+
               <div className={`rounded-[20px] border p-4 ${softCardClass}`}>
                 <label className={`mb-2 block text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
                   Node label
@@ -211,6 +231,7 @@ export function EditorSidebar({
                 <input
                   value={selectedNodeData.text}
                   onChange={(e) => updateNodeText(e.target.value)}
+                  disabled={isNodeLocked}
                   className={`w-full bg-transparent text-base font-medium outline-none ${
                     isDark ? 'text-slate-100 placeholder:text-slate-500' : 'text-slate-900 placeholder:text-slate-400'
                   }`}
@@ -235,6 +256,7 @@ export function EditorSidebar({
                   <select
                     value={selectedNodeData.type}
                     onChange={(e) => updateNodeType(e.target.value as FlowChartNode['type'])}
+                    disabled={isNodeLocked}
                     className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
                       isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
                     }`}
@@ -254,6 +276,7 @@ export function EditorSidebar({
                     onChange={(e) =>
                       updateNodeStyle({ borderStyle: e.target.value as NonNullable<FlowChartNode['style']>['borderStyle'] })
                     }
+                    disabled={isNodeLocked}
                     className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
                       isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
                     }`}
@@ -269,18 +292,21 @@ export function EditorSidebar({
                   value={selectedNodeData.style?.backgroundColor ?? '#ffffff'}
                   onChange={(value) => updateNodeStyle({ backgroundColor: value })}
                   workspaceTheme={workspaceTheme}
+                  disabled={isNodeLocked}
                 />
                 <ColorField
                   label="Border Color"
                   value={selectedNodeData.style?.borderColor ?? '#cbd5e1'}
                   onChange={(value) => updateNodeStyle({ borderColor: value })}
                   workspaceTheme={workspaceTheme}
+                  disabled={isNodeLocked}
                 />
                 <ColorField
                   label="Text Color"
                   value={selectedNodeData.style?.textColor ?? '#0f172a'}
                   onChange={(value) => updateNodeStyle({ textColor: value })}
                   workspaceTheme={workspaceTheme}
+                  disabled={isNodeLocked}
                 />
 
                 <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
@@ -291,16 +317,64 @@ export function EditorSidebar({
                     max={24}
                     value={selectedNodeData.style?.fontSize ?? 12}
                     onChange={(e) => updateNodeStyle({ fontSize: Number(e.target.value) || 12 })}
+                    disabled={isNodeLocked}
                     className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
                       isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
                     }`}
                   />
                 </label>
+
+                <label className={`text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>
+                  Rotation
+                  <select
+                    value={selectedNodeData.style?.rotation ?? 0}
+                    onChange={(e) =>
+                      updateNodeStyle({ rotation: Number(e.target.value) as 0 | 90 | 180 | 270 })
+                    }
+                    disabled={isNodeLocked}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
+                      isDark ? 'border-white/10 bg-[#0f1116] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
+                    }`}
+                  >
+                    <option value={0}>0°</option>
+                    <option value={90}>90°</option>
+                    <option value={180}>180°</option>
+                    <option value={270}>270°</option>
+                  </select>
+                </label>
               </div>
 
               <button
+                onClick={() => onSetSelectionLocked(!isNodeLocked)}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-sm font-semibold transition ${
+                  isNodeLocked
+                    ? isDark
+                      ? 'border-amber-400/25 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15'
+                      : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : isDark
+                      ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:border-white/20 hover:bg-white/[0.08]'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {isNodeLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                {isNodeLocked ? 'Unlock selected node' : 'Lock selected node'}
+              </button>
+
+              <button
+                onClick={onSaveNodeStyleAsDefault}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-sm font-semibold transition ${
+                  isDark
+                    ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:border-white/20 hover:bg-white/[0.08]'
+                    : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                Save as default for {selectedNodeData.type}
+              </button>
+
+              <button
                 onClick={onDeleteSelectedNode}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
+                disabled={isNodeLocked}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete selected node
@@ -310,12 +384,44 @@ export function EditorSidebar({
             <div className="space-y-4">
               <div className={`rounded-[20px] border p-4 text-sm ${softCardClass} ${softTextClass}`}>
                 <p className={`font-medium ${softStrongTextClass}`}>{selectedNodeCount} nodes selected</p>
-                <p className="mt-2">Drag to move them together, use arrow keys to nudge, or duplicate with `Ctrl/Cmd + D`.</p>
+                <p className="mt-2">
+                  {hasLockedSelection
+                    ? 'Unlock the locked nodes before aligning, grouping, or tidying the full selection.'
+                    : 'Drag them together, use the floating toolbar to align or tidy, or duplicate with `Ctrl/Cmd + D`.'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => onSetSelectionLocked(true)}
+                  disabled={allSelectedNodesLocked}
+                  className={`inline-flex items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                    isDark
+                      ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:border-white/20 hover:bg-white/[0.08]'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <Lock className="h-4 w-4" />
+                  Lock selection
+                </button>
+                <button
+                  onClick={() => onSetSelectionLocked(false)}
+                  disabled={!hasLockedSelection}
+                  className={`inline-flex items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                    isDark
+                      ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:border-white/20 hover:bg-white/[0.08]'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <Unlock className="h-4 w-4" />
+                  Unlock selection
+                </button>
               </div>
 
               <button
                 onClick={onDeleteSelectedNodes}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
+                disabled={allSelectedNodesLocked}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete selection
@@ -332,6 +438,9 @@ export function EditorSidebar({
                 </p>
                 <p className={`mt-1 ${sectionCopyClass}`}>
                   {selectedConnectionData.label ? `Label: ${selectedConnectionData.label}` : 'No label on this connection.'}
+                </p>
+                <p className={`mt-2 ${sectionCopyClass}`}>
+                  Drag the bend handle on the selected line to reroute it around nearby blocks.
                 </p>
               </div>
 
@@ -399,6 +508,34 @@ export function EditorSidebar({
                 </label>
               </div>
 
+              <label className={`flex items-center gap-3 rounded-[20px] border p-4 cursor-pointer transition ${softCardClass}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedConnectionData.animated ?? false}
+                  onChange={(e) => updateConnectionAnimated(e.target.checked)}
+                  className="h-5 w-5 rounded border-gray-300 text-sky-500 focus:ring-sky-500"
+                />
+                <span className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                  Animated Flow
+                </span>
+              </label>
+
+              <button
+                onClick={onResetConnectionRoute}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-sm font-semibold transition ${
+                  hasManualConnectionRoute
+                    ? isDark
+                      ? 'border-sky-400/25 bg-sky-500/10 text-sky-100 hover:bg-sky-500/15'
+                      : 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                    : isDark
+                      ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:border-white/20 hover:bg-white/[0.08]'
+                      : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <Circle className="h-4 w-4" />
+                {hasManualConnectionRoute ? 'Reset to auto route' : 'Auto route active'}
+              </button>
+
               <button
                 onClick={onDeleteSelectedConnection}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
@@ -461,9 +598,13 @@ export function EditorSidebar({
             <ShortcutRow action="Drag empty canvas" result="Marquee-select multiple nodes" theme={workspaceTheme} />
             <ShortcutRow action="Double-click node" result="Rename it inline" theme={workspaceTheme} />
             <ShortcutRow action="Alt + drag node" result="Pull out a connector to another block" theme={workspaceTheme} />
+            <ShortcutRow action="Alt + click grouped node" result="Deep-select one node inside a group" theme={workspaceTheme} />
+            <ShortcutRow action="R / D / O / L / T" result="Drop process, decision, connector, note, or triangle fast" theme={workspaceTheme} />
             <ShortcutRow action="Cmd/Ctrl + C / V / D" result="Copy, paste, or duplicate selection" theme={workspaceTheme} />
             <ShortcutRow action="Ctrl/Cmd + wheel" result="Zoom the workspace like a canvas tool" theme={workspaceTheme} />
             <ShortcutRow action="Alt + Arrow key" result="Create a connected step from the selected node" theme={workspaceTheme} />
+            <ShortcutRow action="F" result="Fit the current selection" theme={workspaceTheme} />
+            <ShortcutRow action="G / Shift + G" result="Group or ungroup a multi-selection" theme={workspaceTheme} />
             <ShortcutRow action="/" result="Open the command menu" theme={workspaceTheme} />
             <ShortcutRow action="Cmd/Ctrl + K" result="Open the command menu from anywhere" theme={workspaceTheme} />
             <ShortcutRow action="Cmd/Ctrl + S" result="Save the current board" theme={workspaceTheme} />
@@ -479,12 +620,14 @@ function ColorField({
   label,
   value,
   onChange,
-  workspaceTheme
+  workspaceTheme,
+  disabled = false
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   workspaceTheme: WorkspaceTheme;
+  disabled?: boolean;
 }) {
   const isDark = workspaceTheme === 'dark';
 
@@ -496,8 +639,14 @@ function ColorField({
           isDark ? 'border-white/10 bg-[#0f1116]' : 'border-slate-200 bg-white'
         }`}
       >
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-8 w-10 rounded border-0 bg-transparent p-0" />
-        <span className={`text-sm font-medium ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{value}</span>
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="h-8 w-10 rounded border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-45"
+        />
+        <span className={`text-sm font-medium ${isDark ? 'text-slate-100' : 'text-slate-900'} ${disabled ? 'opacity-45' : ''}`}>{value}</span>
       </div>
     </label>
   );

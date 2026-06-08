@@ -1,5 +1,6 @@
 import { createId } from '../lib/createId';
 import type { FlowChartDraft, FlowChartRecord, FlowChartUpdateInput } from '../types/flowChart';
+import { analyticsService } from './analyticsService';
 
 const FLOWCHARTS_STORAGE_KEY = 'flowchart-maker.flowcharts';
 const LOCAL_USER_ID = 'local-user';
@@ -32,6 +33,10 @@ export const flowchartService = {
     const flowcharts = readFlowcharts();
     flowcharts.unshift(newFlowchart);
     writeFlowcharts(flowcharts);
+    
+    // Log the creation event asynchronously
+    analyticsService.logEvent('flowchart_created');
+    
     return newFlowchart;
   },
 

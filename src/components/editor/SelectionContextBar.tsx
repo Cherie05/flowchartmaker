@@ -1,16 +1,18 @@
-import { Copy, GitBranch, Plus, Route, Trash2 } from 'lucide-react';
+import { Copy, GitBranch, Lock, Plus, Route, Trash2, Unlock } from 'lucide-react';
 import type { ConnectionMarker, ConnectionType, FlowChartNode } from '../../types/flowChart';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
 type NodeToolbarProps = {
   mode: 'node';
   nodeType: FlowChartNode['type'];
+  isLocked: boolean;
   nodeTypes: WorkspaceNodeType[];
   onNodeTypeChange: (type: FlowChartNode['type']) => void;
   onQuickCreateRight: () => void;
   onQuickCreateDown: () => void;
   onOpenQuickAdd: () => void;
   onDuplicate: () => void;
+  onToggleLock: () => void;
   onDelete: () => void;
 };
 
@@ -22,8 +24,28 @@ type ConnectionToolbarProps = {
   onConnectionTypeChange: (type: ConnectionType) => void;
   onToggleMarker: (side: 'startMarker' | 'endMarker') => void;
   onAddLabel: () => void;
+  onResetRoute: () => void;
+  hasManualRoute: boolean;
   onOpenQuickAdd: () => void;
   onDelete: () => void;
+};
+
+type MultiToolbarProps = {
+  mode: 'multi';
+  canUngroup: boolean;
+  hasLockedNodes: boolean;
+  allLocked: boolean;
+  onAlignLeft: () => void;
+  onAlignTop: () => void;
+  onDistributeHorizontal: () => void;
+  onDistributeVertical: () => void;
+  onTidy: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  onBringForward: () => void;
+  onSendBackward: () => void;
+  onLock: () => void;
+  onUnlock: () => void;
 };
 
 type SelectionContextBarProps = {
@@ -31,7 +53,7 @@ type SelectionContextBarProps = {
   x: number;
   y: number;
   workspaceTheme: WorkspaceTheme;
-} & (NodeToolbarProps | ConnectionToolbarProps);
+} & (NodeToolbarProps | ConnectionToolbarProps | MultiToolbarProps);
 
 export function SelectionContextBar(props: SelectionContextBarProps) {
   const { isVisible, x, y, workspaceTheme } = props;
@@ -56,7 +78,7 @@ export function SelectionContextBar(props: SelectionContextBarProps) {
       className="absolute z-[60]"
       style={{
         left: x,
-        top: y,
+        top: Math.max(y, 70),
         transform: 'translate(-50%, -120%)'
       }}
     >
@@ -66,6 +88,7 @@ export function SelectionContextBar(props: SelectionContextBarProps) {
             <select
               value={props.nodeType}
               onChange={(e) => props.onNodeTypeChange(e.target.value as FlowChartNode['type'])}
+              disabled={props.isLocked}
               className={`rounded-xl border px-3 py-2 text-sm font-medium outline-none ${
                 isDark ? 'border-white/10 bg-[#101218] text-slate-100' : 'border-slate-200 bg-white text-slate-900'
               }`}
@@ -77,13 +100,46 @@ export function SelectionContextBar(props: SelectionContextBarProps) {
                 </option>
               ))}
             </select>
-            <ToolbarButton icon={Plus} label="Next" onClick={props.onQuickCreateRight} className={buttonClass} />
-            <ToolbarButton icon={GitBranch} label="Below" onClick={props.onQuickCreateDown} className={buttonClass} />
-            <ToolbarButton icon={Route} label="Picker" onClick={props.onOpenQuickAdd} className={buttonClass} />
+            <ToolbarButton icon={Plus} label="Next" onClick={props.onQuickCreateRight} className={buttonClass} disabled={props.isLocked} />
+            <ToolbarButton icon={GitBranch} label="Branch" onClick={props.onQuickCreateDown} className={buttonClass} disabled={props.isLocked} />
+            <ToolbarButton icon={Route} label="Add block" onClick={props.onOpenQuickAdd} className={buttonClass} disabled={props.isLocked} />
             <ToolbarButton icon={Copy} label="Duplicate" onClick={props.onDuplicate} className={buttonClass} />
-            <ToolbarButton icon={Trash2} label="Delete" onClick={props.onDelete} className={buttonClass} />
+            <ToolbarButton
+              icon={props.isLocked ? Unlock : Lock}
+              label={props.isLocked ? 'Unlock' : 'Lock'}
+              onClick={props.onToggleLock}
+              className={props.isLocked ? activeClass : buttonClass}
+            />
+            <ToolbarButton icon={Trash2} label="Delete" onClick={props.onDelete} className={buttonClass} disabled={props.isLocked} />
           </>
         ) : (
+          props.mode === 'multi' ? (
+            <>
+              <ToolbarButton icon={Route} label="Align left" onClick={props.onAlignLeft} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Route} label="Align top" onClick={props.onAlignTop} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Route} label="Distribute H" onClick={props.onDistributeHorizontal} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Route} label="Distribute V" onClick={props.onDistributeVertical} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={GitBranch} label="Tidy" onClick={props.onTidy} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Copy} label="Group" onClick={props.onGroup} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton
+                icon={Copy}
+                label="Ungroup"
+                onClick={props.onUngroup}
+                className={props.canUngroup ? activeClass : buttonClass}
+                disabled={!props.canUngroup || props.hasLockedNodes}
+              />
+              <ToolbarButton icon={Plus} label="Front" onClick={props.onBringForward} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Plus} label="Back" onClick={props.onSendBackward} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Lock} label="Lock" onClick={props.onLock} className={buttonClass} disabled={props.allLocked} />
+              <ToolbarButton
+                icon={Unlock}
+                label="Unlock"
+                onClick={props.onUnlock}
+                className={props.hasLockedNodes ? activeClass : buttonClass}
+                disabled={!props.hasLockedNodes}
+              />
+            </>
+          ) : (
           <>
             {(['curved', 'elbow', 'straight'] as const).map((type) => (
               <ToolbarButton
@@ -107,9 +163,16 @@ export function SelectionContextBar(props: SelectionContextBarProps) {
               className={props.endMarker === 'arrow' ? activeClass : buttonClass}
             />
             <ToolbarButton icon={Plus} label="Label" onClick={props.onAddLabel} className={buttonClass} />
+            <ToolbarButton
+              icon={Route}
+              label="Auto route"
+              onClick={props.onResetRoute}
+              className={props.hasManualRoute ? activeClass : buttonClass}
+            />
             <ToolbarButton icon={Plus} label="Add block" onClick={props.onOpenQuickAdd} className={buttonClass} />
             <ToolbarButton icon={Trash2} label="Delete" onClick={props.onDelete} className={buttonClass} />
           </>
+          )
         )}
       </div>
     </div>
@@ -120,17 +183,20 @@ function ToolbarButton({
   icon: Icon,
   label,
   onClick,
-  className
+  className,
+  disabled = false
 }: {
   icon: typeof Plus;
   label: string;
   onClick: () => void;
   className: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition ${className}`}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
     >
       <Icon className="h-4 w-4" />
       {label}
