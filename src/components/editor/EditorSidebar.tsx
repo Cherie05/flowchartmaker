@@ -125,7 +125,10 @@ export function EditorSidebar({
         <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${sectionKickerClass}`}>AI Composer</p>
+              <p className={`text-xs font-semibold uppercase tracking-[0.24em] flex items-center gap-2 ${sectionKickerClass}`}>
+                AI Composer
+                <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600 tracking-normal">Coming Soon</span>
+              </p>
               <h3 className={`mt-1 text-lg font-semibold ${sectionTitleClass}`}>Generate a first draft</h3>
               <p className={`mt-1 text-sm leading-6 ${sectionCopyClass}`}>
                 Write a simple prompt and use the result as a starting point, not the final board.
@@ -140,8 +143,9 @@ export function EditorSidebar({
             ref={aiTextareaRef}
             value={aiDescription}
             onChange={(e) => onAiDescriptionChange(e.target.value)}
-            placeholder="Describe a process (e.g., 'E-commerce checkout', 'User registration')"
-            className={`min-h-[112px] w-full rounded-[20px] border px-4 py-3 text-sm leading-6 outline-none transition ${fieldClass}`}
+            disabled={true}
+            placeholder="AI is currently in development..."
+            className={`min-h-[112px] w-full rounded-[20px] border px-4 py-3 text-sm leading-6 outline-none transition opacity-50 cursor-not-allowed ${fieldClass}`}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -152,11 +156,11 @@ export function EditorSidebar({
 
           <button
             onClick={onGenerate}
-            disabled={isGenerating || !aiDescription.trim()}
-            className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-semibold text-white shadow-xl transition-all duration-200 ${isGenerating || !aiDescription.trim() ? 'bg-orange-400 opacity-50 cursor-not-allowed' : 'bg-orange-500 hover:-translate-y-0.5 hover:bg-orange-400 hover:shadow-[0_20px_40px_-20px_rgba(249,115,22,0.4)] active:translate-y-0 active:shadow-none'}`}
+            disabled={true}
+            className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-semibold text-white shadow-xl transition-all duration-200 bg-orange-400 opacity-50 cursor-not-allowed`}
           >
             {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            {isGenerating ? 'Generating...' : 'Generate AI Draft'}
+            {isGenerating ? 'Generating...' : 'Coming Soon'}
           </button>
         </section>
 
