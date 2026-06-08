@@ -46,27 +46,27 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl relative animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity font-sans">
+      <div className="bg-white border border-slate-200 rounded-3xl p-8 w-full max-w-md shadow-[0_20px_48px_-30px_rgba(0,0,0,0.1)] relative animate-in fade-in zoom-in duration-200">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+          className="absolute top-6 right-6 text-slate-400 hover:text-slate-900 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
         {isSubmitted ? (
           <div className="text-center py-8">
-            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Star className="w-8 h-8 fill-emerald-400" />
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Star className="w-8 h-8 fill-emerald-500 text-emerald-500" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">Thank You!</h3>
-            <p className="text-slate-400">Your feedback helps us improve Wizzleflow.</p>
+            <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900 mb-2">Thank You!</h3>
+            <p className="text-slate-600 font-light">Your feedback helps us improve Wizzleflow.</p>
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold text-white mb-2">Enjoying Wizzleflow?</h3>
-            <p className="text-slate-400 text-sm mb-6">
+            <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900 mb-2">Enjoying Wizzleflow?</h3>
+            <p className="text-slate-600 font-light text-sm mb-8">
               Let us know how your experience has been so far. Your feedback is highly appreciated!
             </p>
 
@@ -82,10 +82,10 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                     className="p-1 transition-transform hover:scale-110 focus:outline-none"
                   >
                     <Star
-                      className={`w-8 h-8 transition-colors ${
+                      className={`w-10 h-10 transition-colors ${
                         (hoveredRating || rating) >= star
-                          ? 'fill-indigo-500 text-indigo-500'
-                          : 'text-slate-600'
+                          ? 'fill-indigo-600 text-indigo-600'
+                          : 'text-slate-200'
                       }`}
                     />
                   </button>
@@ -93,13 +93,13 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
                   Any suggestions or issues? (Optional)
                 </label>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none h-24"
+                  className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 transition-all focus:outline-none focus:border-indigo-600 focus:bg-white resize-none h-24 font-light"
                   placeholder="Tell us what you think..."
                 />
               </div>
@@ -107,13 +107,13 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
               <button
                 type="submit"
                 disabled={rating === 0 || isSubmitting}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full group inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 py-4 text-base font-bold text-white transition-all hover:bg-indigo-600 disabled:opacity-50 active:scale-95"
               >
                 {isSubmitting ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
                   <>
-                    <Send className="w-4 h-4" />
+                    <Send className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                     Submit Feedback
                   </>
                 )}
