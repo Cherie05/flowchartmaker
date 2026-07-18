@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getNodeDefaults } from '../features/editor/domain/nodeDefaults';
 import { createId } from '../lib/createId';
 import type { Connection, FlowChart, FlowChartNode, Position } from '../types/flowChart';
 
@@ -84,24 +85,25 @@ export function useFlowChart(): UseFlowChartReturn {
     updater: (flowChart: FlowChart) => FlowChart,
     options?: { saveHistory?: boolean }
   ) => {
-    setFlowChart((prev) => {
-      const updated = updater(prev);
+    const previous = latestFlowChartRef.current;
+    const updated = updater(previous);
 
-      if (updated === prev || areFlowChartsEqual(updated, prev)) {
-        return prev;
-      }
+    if (updated === previous || areFlowChartsEqual(updated, previous)) {
+      return;
+    }
 
-      latestFlowChartRef.current = updated;
+    latestFlowChartRef.current = updated;
 
-      if (options?.saveHistory !== false) {
-        saveToHistory(updated);
-      }
+    if (options?.saveHistory !== false) {
+      saveToHistory(updated);
+    }
 
-      return updated;
-    });
+    setFlowChart(updated);
   }, [saveToHistory]);
 
   const addNode = useCallback((type: FlowChartNode['type'], position: Position) => {
+    const defaults = getNodeDefaults(type);
+
     transformFlowChart((prev) => ({
       ...prev,
       nodes: [
@@ -110,9 +112,10 @@ export function useFlowChart(): UseFlowChartReturn {
           id: createId('node'),
           type,
           position,
-          text: getDefaultText(type),
-          width: getDefaultWidth(type),
-          height: getDefaultHeight(type),
+          text: defaults.text,
+          width: defaults.width,
+          height: defaults.height,
+          ...(defaults.style ? { style: defaults.style } : {}),
           zIndex: getNextZIndex(prev.nodes)
         }
       ],
@@ -421,82 +424,6 @@ function cloneFlowChart(flowChart: FlowChart): FlowChart {
   };
 }
 
-function getDefaultText(type: FlowChartNode['type']): string {
-  switch (type) {
-    case 'start':
-      return 'Start';
-    case 'process':
-      return 'Process Step';
-    case 'decision':
-      return 'Decision?';
-    case 'end':
-      return 'End';
-    case 'connector':
-      return 'Connector';
-    case 'input':
-      return 'Input / Output';
-    case 'manualInput':
-      return 'Manual Input';
-    case 'manualOperation':
-      return 'Manual Operation';
-    case 'triangle':
-      return 'Marker';
-    case 'hexagon':
-      return 'Preparation';
-    case 'database':
-      return 'Database';
-    case 'annotation':
-      return 'Annotation';
-    default:
-      return 'Node';
-  }
-}
-
-function getDefaultWidth(type: FlowChartNode['type']): number {
-  switch (type) {
-    case 'start':
-    case 'end':
-      return 100;
-    case 'decision':
-      return 120;
-    case 'connector':
-      return 80;
-    case 'triangle':
-      return 110;
-    case 'hexagon':
-      return 150;
-    case 'database':
-      return 150;
-    case 'annotation':
-      return 180;
-    case 'manualInput':
-      return 150;
-    case 'manualOperation':
-      return 160;
-    case 'input':
-      return 160;
-    default:
-      return 140;
-  }
-}
-
-function getDefaultHeight(type: FlowChartNode['type']): number {
-  switch (type) {
-    case 'start':
-    case 'end':
-    case 'connector':
-      return 60;
-    case 'triangle':
-      return 96;
-    case 'database':
-      return 96;
-    case 'annotation':
-      return 92;
-    default:
-      return 80;
-  }
-}
-
 function areFlowChartsEqual(left: FlowChart, right: FlowChart): boolean {
   if (
     left.name !== right.name ||
@@ -543,6 +470,7 @@ function areFlowChartsEqual(left: FlowChart, right: FlowChart): boolean {
       current.endMarker !== previous.endMarker ||
       current.color !== previous.color ||
       current.labelPosition !== previous.labelPosition ||
+      current.animated !== previous.animated ||
       !areWaypointsEqual(current.waypoints, previous.waypoints)
     ) {
       return false;

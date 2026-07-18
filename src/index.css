@@ -1,17 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    --wf-bg: #f6f7f9;
+    --wf-surface: #ffffff;
+    --wf-surface-elevated: #ffffff;
+    --wf-border: #e2e8f0;
+    --wf-text: #0f172a;
+    --wf-muted: #64748b;
+    --wf-primary: #6d28d9;
+    --wf-danger: #be123c;
+    --wf-success: #047857;
+    --wf-warning: #b45309;
+    --wf-radius: 0.875rem;
+    --wf-shadow-sm: 0 8px 28px -22px rgba(15, 23, 42, 0.35);
+    --wf-shadow-md: 0 24px 56px -36px rgba(15, 23, 42, 0.38);
+    --wf-focus: 0 0 0 4px rgba(139, 92, 246, 0.2);
     color: #0f172a;
     background:
       radial-gradient(circle at top left, rgba(255, 190, 118, 0.22), transparent 28%),
       radial-gradient(circle at 80% 0%, rgba(125, 173, 255, 0.18), transparent 24%),
       linear-gradient(180deg, #f9f6ef 0%, #f4f1e8 100%);
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 
   html {
@@ -23,15 +35,10 @@
     min-height: 100vh;
     background: transparent;
     color: #0f172a;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 
-  h1,
-  h2,
-  h3 {
-    font-family: 'Fraunces', Georgia, serif;
-    letter-spacing: -0.03em;
-  }
+  h1, h2, h3 { font-family: 'Space Grotesk', system-ui, sans-serif; letter-spacing: -0.025em; }
 
   button,
   input,
@@ -44,6 +51,8 @@
     background: rgba(251, 146, 60, 0.24);
     color: #111827;
   }
+
+  :focus-visible { outline-color: var(--wf-primary); }
 }
 
 @layer utilities {
@@ -57,6 +66,15 @@
     }
     to {
       stroke-dashoffset: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
     }
   }
 }

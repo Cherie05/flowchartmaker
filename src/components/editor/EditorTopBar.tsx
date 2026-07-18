@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Check, ChevronDown, ChevronUp, Download, FileJson, Image as ImageIcon, Loader, Moon, Redo, Save, Sun, Undo, Play } from 'lucide-react';
-import { WorkspaceChip } from './WorkspaceBits';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ChevronDown, Download, FileJson, Image as ImageIcon, Keyboard, MoreHorizontal, Moon, Play, Redo, Sun, Trash2, Undo, Upload } from 'lucide-react';
+import { LocalSaveStatus, type LocalSaveState } from '../../features/workspace/components/LocalSaveStatus';
 import type { WorkspaceTheme } from './types';
 
 interface EditorTopBarProps {
@@ -9,268 +9,90 @@ interface EditorTopBarProps {
   onBack: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  onSave: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  isSaving: boolean;
-  justSaved: boolean;
-  nodeCount: number;
-  connectionCount: number;
-  isLinking: boolean;
+  saveStatus: LocalSaveState;
   workspaceTheme: WorkspaceTheme;
   onThemeChange: (theme: WorkspaceTheme) => void;
-  onExportPng?: (transparent: boolean) => void;
-  onExportSvg?: (transparent: boolean) => void;
-  onExportPdf?: () => void;
-  onExportJson?: () => void;
-  onPresent?: () => void;
-  onClose?: () => void;
+  onImport: () => void;
+  onExportPng: (transparent: boolean) => void;
+  onExportSvg: (transparent: boolean) => void;
+  onExportPdf: () => void;
+  onExportJson: () => void;
+  onPresent: () => void;
+  onClearBoard: () => void;
+  showHints: boolean;
+  onToggleHints: () => void;
 }
 
-export function EditorTopBar({
-  flowchartName,
-  onNameChange,
-  onBack,
-  onUndo,
-  onRedo,
-  onSave,
-  canUndo,
-  canRedo,
-  isSaving,
-  justSaved,
-  nodeCount,
-  connectionCount,
-  isLinking,
-  workspaceTheme,
-  onThemeChange,
-  onExportPng,
-  onExportSvg,
-  onExportPdf,
-  onExportJson,
-  onPresent,
-  onClose
-}: EditorTopBarProps) {
-  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-  const [isTransparent, setIsTransparent] = useState(false);
+export function EditorTopBar(props: EditorTopBarProps) {
+  const [openMenu, setOpenMenu] = useState<'export' | 'more' | null>(null);
+  const [transparent, setTransparent] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const isDark = props.workspaceTheme === 'dark';
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsExportMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const close = (event: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpenMenu(null); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenMenu(null); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape); };
   }, []);
 
-  const isDark = workspaceTheme === 'dark';
-  const shellClass = isDark
-    ? 'border-white/8 bg-[#151517]/96 shadow-[0_18px_50px_-38px_rgba(0,0,0,0.8)]'
-    : 'border-slate-200/80 bg-[#f7f3ea]/94 shadow-[0_18px_48px_-38px_rgba(148,163,184,0.55)]';
-  const backButtonClass = isDark
-    ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
-    : 'border-slate-200 bg-white/85 text-slate-700 hover:border-slate-300 hover:bg-white';
-  const titleClass = isDark ? 'text-slate-50 placeholder:text-slate-500' : 'text-slate-900 placeholder:text-slate-400';
-  const actionButtonClass = isDark
-    ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
-    : 'border-slate-200 bg-white/88 text-slate-700 hover:border-slate-300 hover:bg-white';
-  const themeShellClass = isDark ? 'border-white/10 bg-white/[0.04]' : 'border-slate-200 bg-white/88';
+  const shell = isDark ? 'border-white/10 bg-[#15171b]/96 text-slate-100' : 'border-slate-200 bg-white/95 text-slate-900';
+  const button = isDark ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.09]' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50';
+  const menu = isDark ? 'border-white/10 bg-[#1b1d22] text-slate-100' : 'border-slate-200 bg-white text-slate-800';
+  const menuItem = isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-slate-50';
 
   return (
-    <header className={`relative z-50 border-b px-4 py-3 backdrop-blur-xl lg:px-5 ${shellClass}`}>
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0 flex items-center gap-2">
-          {onClose && (
-            <button
-              onClick={onClose}
-              className={`p-2 rounded-full transition ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-black/5 text-slate-500'}`}
-              title="Hide header"
-            >
-              <ChevronUp className="h-5 w-5" />
-            </button>
-          )}
+    <header className={`relative z-50 border-b px-3 py-2.5 backdrop-blur-xl sm:px-4 ${shell}`}>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={props.onBack} aria-label="Back to dashboard" title="Back to dashboard" className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${button}`}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></button>
 
-
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              onClick={onBack}
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition ${backButtonClass}`}
-              title="Back to dashboard"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-
-            <div className="min-w-0">
-              <input
-                type="text"
-                value={flowchartName}
-                onChange={(e) => onNameChange(e.target.value)}
-                className={`w-full min-w-0 bg-transparent text-2xl font-semibold tracking-tight outline-none ${titleClass}`}
-                placeholder="Name your board"
-              />
-
-            </div>
-          </div>
+        <div className="min-w-0 flex-1 sm:max-w-md">
+          <label className="sr-only" htmlFor="diagram-name">Diagram name</label>
+          <input id="diagram-name" value={props.flowchartName} onChange={(event) => props.onNameChange(event.target.value)} className={`block w-full truncate bg-transparent text-base font-semibold outline-none sm:text-lg ${isDark ? 'text-white placeholder:text-slate-500' : 'text-slate-950 placeholder:text-slate-400'}`} placeholder="Untitled Diagram" />
+          <LocalSaveStatus status={props.saveStatus} dark={isDark} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <div className={`inline-flex items-center gap-1 rounded-2xl border p-1 ${themeShellClass}`}>
-            <button
-              onClick={() => onThemeChange('dark')}
-              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                workspaceTheme === 'dark'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : isDark
-                    ? 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-              title="Use dark workspace"
-            >
-              <Moon className="h-4 w-4" />
-              Dark
-            </button>
-            <button
-              onClick={() => onThemeChange('light')}
-              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                workspaceTheme === 'light'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : isDark
-                    ? 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-              title="Use light workspace"
-            >
-              <Sun className="h-4 w-4" />
-              Light
-            </button>
-          </div>
-          <button
-            onClick={onUndo}
-            disabled={!canUndo}
-            className={`inline-flex items-center gap-2 rounded-2xl border px-3.5 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${actionButtonClass}`}
-          >
-            <Undo className="h-4 w-4" />
-            Undo
-          </button>
-          <button
-            onClick={onRedo}
-            disabled={!canRedo}
-            className={`inline-flex items-center gap-2 rounded-2xl border px-3.5 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${actionButtonClass}`}
-          >
-            <Redo className="h-4 w-4" />
-            Redo
-          </button>
-          <button
-            onClick={onPresent}
-            className={`inline-flex items-center gap-2 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400`}
-          >
-            <Play className="h-4 w-4" />
-            Present
-          </button>
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-              className={`inline-flex items-center gap-2 rounded-2xl border px-3.5 py-2.5 text-sm font-medium transition ${actionButtonClass}`}
-            >
-              <Download className="h-4 w-4" />
-              Export
-              <ChevronDown className="h-4 w-4 opacity-70" />
-            </button>
+        <div className="ml-auto flex items-center gap-1.5" ref={menuRef}>
+          <button type="button" onClick={props.onUndo} disabled={!props.canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${button}`}><Undo className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" onClick={props.onRedo} disabled={!props.canRedo} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${button}`}><Redo className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" onClick={props.onImport} className={`hidden h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 lg:inline-flex ${button}`}><Upload className="h-4 w-4" aria-hidden="true" />Import</button>
 
-            {isExportMenuOpen && (
-              <div className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border p-2 shadow-xl z-50 ${
-                isDark ? 'border-white/10 bg-[#1b1c20]' : 'border-slate-200 bg-white'
-              }`}>
-                <div className={`px-3 py-2 text-[11px] font-bold uppercase tracking-[0.15em] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Export as Image
-                </div>
-                <button
-                  onClick={() => { onExportPng?.(isTransparent); setIsExportMenuOpen(false); }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                    isDark ? 'text-slate-200 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <ImageIcon className="h-4 w-4 opacity-70" />
-                  PNG Image
-                </button>
-                <button
-                  onClick={() => { onExportSvg?.(isTransparent); setIsExportMenuOpen(false); }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                    isDark ? 'text-slate-200 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <ImageIcon className="h-4 w-4 opacity-70" />
-                  SVG Vector
-                </button>
-
-                <label className={`mt-1 flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-xs font-medium transition ${
-                  isDark ? 'text-slate-400 hover:bg-white/[0.04]' : 'text-slate-500 hover:bg-slate-50'
-                }`}>
-                  <div className={`flex h-4 w-4 items-center justify-center rounded border transition ${
-                    isTransparent
-                      ? isDark ? 'border-sky-500 bg-sky-500' : 'border-sky-500 bg-sky-500'
-                      : isDark ? 'border-white/20 bg-transparent' : 'border-slate-300 bg-transparent'
-                  }`}>
-                    {isTransparent && <Check className="h-3 w-3 text-white" />}
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="hidden"
-                    checked={isTransparent}
-                    onChange={(e) => setIsTransparent(e.target.checked)}
-                  />
-                  Transparent background
-                </label>
-
-                <div className={`my-2 border-t ${isDark ? 'border-white/10' : 'border-slate-100'}`} />
-
-                <div className={`px-3 py-2 text-[11px] font-bold uppercase tracking-[0.15em] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Export Document
-                </div>
-                <button
-                  onClick={() => { onExportPdf?.(); setIsExportMenuOpen(false); }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                    isDark ? 'text-slate-200 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <FileJson className="h-4 w-4 opacity-70" />
-                  PDF Document
-                </button>
-                <button
-                  onClick={() => { onExportJson?.(); setIsExportMenuOpen(false); }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                    isDark ? 'text-slate-200 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <FileJson className="h-4 w-4 opacity-70" />
-                  JSON Data
-                </button>
+          <div className="relative">
+            <button type="button" onClick={() => setOpenMenu((current) => current === 'export' ? null : 'export')} aria-expanded={openMenu === 'export'} aria-haspopup="menu" className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-700 px-3 text-sm font-semibold text-white transition hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300"><Download className="h-4 w-4" aria-hidden="true" /><span className="hidden sm:inline">Export</span><ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /></button>
+            {openMenu === 'export' && (
+              <div role="menu" aria-label="Export diagram" className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border p-2 shadow-xl ${menu}`}>
+                <MenuButton icon={ImageIcon} label="Export PNG" onClick={() => { props.onExportPng(transparent); setOpenMenu(null); }} className={menuItem} />
+                <MenuButton icon={ImageIcon} label="Export SVG" onClick={() => { props.onExportSvg(transparent); setOpenMenu(null); }} className={menuItem} />
+                <MenuButton icon={FileJson} label="Export PDF" onClick={() => { props.onExportPdf(); setOpenMenu(null); }} className={menuItem} />
+                <MenuButton icon={FileJson} label="Export JSON" onClick={() => { props.onExportJson(); setOpenMenu(null); }} className={menuItem} />
+                <label className={`mt-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-xs ${menuItem}`}><input type="checkbox" checked={transparent} onChange={(event) => setTransparent(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-violet-700 focus:ring-violet-500" />Transparent PNG/SVG background</label>
               </div>
             )}
           </div>
-          <button
-            onClick={onSave}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-2xl bg-sky-500 px-4 py-2.5 text-sm font-medium text-slate-950 shadow-lg shadow-sky-500/20 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
-          >
-            {justSaved ? <Check className="h-4 w-4" /> : isSaving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {justSaved ? 'Saved' : isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <WorkspaceChip label="Nodes" value={String(nodeCount)} theme={workspaceTheme} />
-        <WorkspaceChip label="Connections" value={String(connectionCount)} theme={workspaceTheme} />
-        <WorkspaceChip
-          label="Mode"
-          value={isLinking ? 'Linking' : 'Editing'}
-          accent={isLinking}
-          theme={workspaceTheme}
-        />
-        <WorkspaceChip label="Storage" value="Local board" theme={workspaceTheme} />
+          <div className="relative">
+            <button ref={moreButtonRef} type="button" onClick={() => setOpenMenu((current) => current === 'more' ? null : 'more')} aria-label="More diagram actions" title="More diagram actions" aria-expanded={openMenu === 'more'} aria-haspopup="menu" className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${button}`}><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></button>
+            {openMenu === 'more' && (
+              <div role="menu" aria-label="More diagram actions" className={`absolute right-0 top-full mt-2 w-64 rounded-2xl border p-2 shadow-xl ${menu}`}>
+                <MenuButton icon={Upload} label="Import JSON" onClick={() => { props.onImport(); setOpenMenu(null); }} className={`lg:hidden ${menuItem}`} />
+                <MenuButton icon={props.workspaceTheme === 'dark' ? Sun : Moon} label={props.workspaceTheme === 'dark' ? 'Use light canvas' : 'Use dark canvas'} onClick={() => props.onThemeChange(props.workspaceTheme === 'dark' ? 'light' : 'dark')} className={menuItem} />
+                <MenuButton icon={Keyboard} label={props.showHints ? 'Hide canvas hints' : 'Show canvas hints'} onClick={props.onToggleHints} className={menuItem} />
+                <MenuButton icon={Play} label="Presentation mode" onClick={() => { props.onPresent(); setOpenMenu(null); }} className={menuItem} />
+                <div className={`my-1 border-t ${isDark ? 'border-white/10' : 'border-slate-100'}`} />
+                <MenuButton icon={Trash2} label="Clear board" onClick={() => { moreButtonRef.current?.focus(); props.onClearBoard(); setOpenMenu(null); }} className="text-rose-600 hover:bg-rose-50" />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </header>
   );
+}
+
+function MenuButton({ icon: Icon, label, onClick, className }: { icon: typeof Upload; label: string; onClick: () => void; className: string }) {
+  return <button type="button" role="menuitem" onClick={onClick} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${className}`}><Icon className="h-4 w-4 opacity-75" aria-hidden="true" />{label}</button>;
 }

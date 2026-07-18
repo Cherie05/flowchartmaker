@@ -1,9 +1,7 @@
 import { createId } from '../lib/createId';
 import type { FlowChartDraft, FlowChartRecord, FlowChartUpdateInput } from '../types/flowChart';
-import { analyticsService } from './analyticsService';
 
 const FLOWCHARTS_STORAGE_KEY = 'flowchart-maker.flowcharts';
-const LOCAL_USER_ID = 'local-user';
 
 export const flowchartService = {
   async getAllFlowcharts(): Promise<FlowChartRecord[]> {
@@ -20,22 +18,16 @@ export const flowchartService = {
     const now = new Date().toISOString();
     const newFlowchart: FlowChartRecord = {
       id: createId('flowchart'),
-      user_id: LOCAL_USER_ID,
       name: flowchart.name?.trim() || 'Untitled Flowchart',
-      description: null,
       nodes: flowchart.nodes ?? [],
       connections: flowchart.connections ?? [],
       created_at: now,
-      updated_at: now,
-      is_public: false
+      updated_at: now
     };
 
     const flowcharts = readFlowcharts();
     flowcharts.unshift(newFlowchart);
     writeFlowcharts(flowcharts);
-    
-    // Log the creation event asynchronously
-    analyticsService.logEvent('flowchart_created');
     
     return newFlowchart;
   },
@@ -54,7 +46,6 @@ export const flowchartService = {
       ...(updates.name !== undefined ? { name: updates.name.trim() || 'Untitled Flowchart' } : {}),
       ...(updates.nodes !== undefined ? { nodes: updates.nodes } : {}),
       ...(updates.connections !== undefined ? { connections: updates.connections } : {}),
-      ...(updates.is_public !== undefined ? { is_public: updates.is_public } : {}),
       updated_at: new Date().toISOString()
     };
 
@@ -104,9 +95,14 @@ function readFlowcharts(): FlowChartRecord[] {
 
   try {
     const parsedValue = JSON.parse(rawValue) as unknown;
-    return Array.isArray(parsedValue) ? parsedValue.filter(isFlowChartRecord) : [];
+    return Array.isArray(parsedValue)
+      ? parsedValue.flatMap((value) => {
+          const flowchart = normalizeFlowChartRecord(value);
+          return flowchart ? [flowchart] : [];
+        })
+      : [];
   } catch {
-    return [];
+    throw new Error('Saved diagram data in this browser is corrupted. Export any recoverable data before clearing storage.');
   }
 }
 
@@ -115,23 +111,37 @@ function writeFlowcharts(flowcharts: FlowChartRecord[]) {
     return;
   }
 
-  window.localStorage.setItem(FLOWCHARTS_STORAGE_KEY, JSON.stringify(flowcharts));
+  try {
+    window.localStorage.setItem(FLOWCHARTS_STORAGE_KEY, JSON.stringify(flowcharts));
+  } catch {
+    throw new Error('Browser storage is unavailable or full. Export a backup and free storage space before continuing.');
+  }
 }
 
-function isFlowChartRecord(value: unknown): value is FlowChartRecord {
+function normalizeFlowChartRecord(value: unknown): FlowChartRecord | null {
   if (typeof value !== 'object' || value === null) {
-    return false;
+    return null;
   }
 
   const candidate = value as Partial<FlowChartRecord>;
-  return (
+  const isValid =
     typeof candidate.id === 'string' &&
-    typeof candidate.user_id === 'string' &&
     typeof candidate.name === 'string' &&
     typeof candidate.created_at === 'string' &&
     typeof candidate.updated_at === 'string' &&
     Array.isArray(candidate.nodes) &&
-    Array.isArray(candidate.connections) &&
-    typeof candidate.is_public === 'boolean'
-  );
+    Array.isArray(candidate.connections);
+
+  if (!isValid) {
+    return null;
+  }
+
+  return {
+    id: candidate.id as string,
+    name: candidate.name as string,
+    nodes: candidate.nodes as FlowChartRecord['nodes'],
+    connections: candidate.connections as FlowChartRecord['connections'],
+    created_at: candidate.created_at as string,
+    updated_at: candidate.updated_at as string
+  };
 }

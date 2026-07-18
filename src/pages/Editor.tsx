@@ -20,8 +20,9 @@ import {
   Triangle
 } from 'lucide-react';
 import { ConnectionLine } from '../components/ConnectionLine';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { Node } from '../components/Node';
-import { FeedbackModal } from '../components/FeedbackModal';
+import { Toast, type ToastTone } from '../components/Toast';
 import { EditorCanvasChrome } from '../components/editor/EditorCanvasChrome';
 import { CommandMenu, type CommandMenuItem } from '../components/editor/CommandMenu';
 import { ConnectorQuickAdd } from '../components/editor/ConnectorQuickAdd';
@@ -32,13 +33,17 @@ import { EditorToolRail } from '../components/editor/EditorToolRail';
 import { EditorTopBar } from '../components/editor/EditorTopBar';
 import type { WorkspaceNodeType, WorkspaceTheme } from '../components/editor/types';
 import { useFlowChart } from '../hooks/useFlowChart';
+import { getKeyboardNudge, getKeyboardViewportPan } from '../features/editor/commands/keyboardCommands';
+import { safeSvgColor, validateImportFileSize, validateImportedDiagram } from '../features/editor/domain/diagramValidation';
+import { getNodeDefaults } from '../features/editor/domain/nodeDefaults';
+import { getStarterDiagramDraft } from '../features/dashboard/diagramTemplates';
+import type { LocalSaveState } from '../features/workspace/components/LocalSaveStatus';
 import { createId } from '../lib/createId';
 import { buildConnectionGeometry } from '../lib/connectionRouting';
 import { getErrorMessage } from '../lib/errors';
 import { buildFlowchartExport, svgToPngDataUrl } from '../lib/flowchartExport';
-import { aiService } from '../services/aiService';
 import { flowchartService } from '../services/flowchartService';
-import type { AIFlowChartResponse, Connection, ConnectionType, FlowChartNode, NodeSide, Position } from '../types/flowChart';
+import type { Connection, ConnectionType, FlowChartNode, NodeSide, Position } from '../types/flowChart';
 
 const WORKSPACE_PADDING = 520;
 const WORKSPACE_SAFE_LEFT = 420;
@@ -50,7 +55,6 @@ const MAX_ZOOM = 2.2;
 const WORKSPACE_THEME_STORAGE_KEY = 'flowchart-workspace-theme';
 const WORKSPACE_LEFT_PANEL_STORAGE_KEY = 'flowchart-workspace-left-panel-collapsed';
 const WORKSPACE_RIGHT_PANEL_STORAGE_KEY = 'flowchart-workspace-right-panel-collapsed';
-const WORKSPACE_TOP_BAR_STORAGE_KEY = 'flowchart-workspace-top-bar-collapsed';
 const WORKSPACE_HINTS_STORAGE_KEY = 'flowchart-workspace-hints-visible';
 const WORKSPACE_DEFAULT_STYLE_STORAGE_KEY = 'flowchart-workspace-default-styles';
 const GRID_SIZE = 24;
@@ -81,8 +85,10 @@ interface DragConnectorState {
 }
 
 type ConnectorQuickAddState = {
-  nodeId: string;
-  handleId: string;
+  fromNodeId: string;
+  fromSide: NodeSide;
+  position: Position;
+  title: string;
 };
 
 type AlignmentGuide = {
@@ -91,6 +97,9 @@ type AlignmentGuide = {
   start: number;
   end: number;
 };
+
+type PendingDestructiveAction = 'clearBoard' | 'deleteSelectedNodes' | null;
+type EditorToast = { message: string; tone: ToastTone };
 
 export function Editor() {
   const { id } = useParams<{ id: string }>();
@@ -124,19 +133,15 @@ export function Editor() {
   const [connectorQuickAdd, setConnectorQuickAdd] = useState<ConnectorQuickAddState | null>(null);
   const [commandMenuQuery, setCommandMenuQuery] = useState('');
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
-  const [aiDescription, setAiDescription] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<LocalSaveState>('idle');
   const [loading, setLoading] = useState(true);
+  const [missingFlowchart, setMissingFlowchart] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [flowchartName, setFlowchartName] = useState('Untitled Flowchart');
   const canvasRef = useRef<HTMLDivElement>(null);
   const workspaceViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const aiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const autoSaveTimeoutRef = useRef<number | null>(null);
-  const saveStatusTimeoutRef = useRef<number | null>(null);
   const clipboardSelectionRef = useRef<ClipboardSelection | null>(null);
   const dragConnectorRef = useRef<DragConnectorState | null>(null);
   const selectionOriginRef = useRef<Position | null>(null);
@@ -154,6 +159,7 @@ export function Editor() {
   });
   const [zoom, setZoom] = useState(1);
   const [presentationMode, setPresentationMode] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(true);
   const [isLeftRailCollapsed, setIsLeftRailCollapsed] = useState(() => {
     if (typeof window === 'undefined') {
       return false;
@@ -167,10 +173,6 @@ export function Editor() {
     }
 
     return window.localStorage.getItem(WORKSPACE_RIGHT_PANEL_STORAGE_KEY) === 'true';
-  });
-  const [isTopBarCollapsed, setIsTopBarCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem(WORKSPACE_TOP_BAR_STORAGE_KEY) === 'true';
   });
   const [showCanvasHints, setShowCanvasHints] = useState(() => {
     if (typeof window === 'undefined') {
@@ -202,24 +204,18 @@ export function Editor() {
   });
   const zoomRef = useRef(zoom);
 
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction>(null);
+  const [toast, setToast] = useState<EditorToast | null>(null);
 
-  // Show feedback popup after 1 minute of usage
+  const notify = useCallback((message: string, tone: ToastTone = 'info') => {
+    setToast({ message, tone });
+  }, []);
+
   useEffect(() => {
-    if (!id) return;
-    
-    const feedbackKey = `wizzleflow_feedback_${id}`;
-    const hasSeenFeedback = window.localStorage.getItem(feedbackKey);
-    
-    if (!hasSeenFeedback) {
-      const timer = setTimeout(() => {
-        setShowFeedbackModal(true);
-        window.localStorage.setItem(feedbackKey, 'true');
-      }, 60000); // 1 minute
-      
-      return () => clearTimeout(timer);
-    }
-  }, [id]);
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const persistFlowchart = useCallback(async () => {
     if (!id) {
@@ -330,11 +326,13 @@ export function Editor() {
 
     try {
       setLoading(true);
+      setMissingFlowchart(false);
       setErrorMessage('');
       const data = await flowchartService.getFlowchartById(id);
 
       if (!data) {
-        setErrorMessage('Flowchart not found.');
+        setMissingFlowchart(true);
+        setErrorMessage('');
         return;
       }
 
@@ -370,15 +368,21 @@ export function Editor() {
   }, [id, loadExistingFlowchart]);
 
   useEffect(() => {
-    if (!loading && id) {
+    if (!loading && id && !missingFlowchart) {
       if (autoSaveTimeoutRef.current) {
         window.clearTimeout(autoSaveTimeoutRef.current);
       }
 
+      setSaveStatus('saving');
       autoSaveTimeoutRef.current = window.setTimeout(() => {
-        persistFlowchart().catch((error) => {
+        persistFlowchart().then(() => {
+          setSaveStatus('saved');
+        }).catch((error) => {
           console.error('Auto-save failed:', error);
-          setErrorMessage(getErrorMessage(error, 'Auto-save failed. Your latest changes are only local.'));
+          setSaveStatus('error');
+          const message = getErrorMessage(error, 'Unable to save in this browser. Export a backup before leaving.');
+          setErrorMessage(message);
+          notify(message, 'error');
         });
       }, 2000);
     }
@@ -388,15 +392,7 @@ export function Editor() {
         window.clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [id, loading, persistFlowchart]);
-
-  useEffect(() => {
-    return () => {
-      if (saveStatusTimeoutRef.current) {
-        window.clearTimeout(saveStatusTimeoutRef.current);
-      }
-    };
-  }, []);
+  }, [id, loading, missingFlowchart, notify, persistFlowchart]);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -425,17 +421,6 @@ export function Editor() {
 
     window.localStorage.setItem(WORKSPACE_RIGHT_PANEL_STORAGE_KEY, String(isRightSidebarCollapsed));
   }, [isRightSidebarCollapsed]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(WORKSPACE_TOP_BAR_STORAGE_KEY, String(isTopBarCollapsed));
-  }, [isTopBarCollapsed]);
-
-  useEffect(() => {
-    if (selectedNodeIds.length > 0 && !isTopBarCollapsed) {
-      setIsTopBarCollapsed(true);
-    }
-  }, [selectedNodeIds.length, isTopBarCollapsed]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -616,7 +601,8 @@ export function Editor() {
     } catch {
       // Ignore clipboard write failures and keep the local clipboard fallback.
     }
-  }, [snapshotSelection]);
+    notify('Selection copied.', 'success');
+  }, [notify, snapshotSelection]);
 
   const pasteSelection = useCallback(async (source?: ClipboardSelection | null) => {
     let snapshot = source ?? clipboardSelectionRef.current;
@@ -667,6 +653,7 @@ export function Editor() {
     }
 
     if (!snapshot?.nodes.length) {
+      notify('Nothing available to paste.', 'info');
       return;
     }
 
@@ -742,7 +729,8 @@ export function Editor() {
     }));
     setNodeSelection(nextNodes.map((node) => node.id), nextNodes[nextNodes.length - 1]?.id ?? null);
     scheduleScrollToNodes(nextNodes);
-  }, [scheduleScrollToNodes, setNodeSelection, transformFlowChart]);
+    notify('Selection pasted.', 'success');
+  }, [notify, scheduleScrollToNodes, setNodeSelection, transformFlowChart]);
 
   const handleManualSave = useCallback(async () => {
     if (!id) {
@@ -750,23 +738,19 @@ export function Editor() {
     }
 
     try {
-      setIsSaving(true);
+      setSaveStatus('saving');
       setErrorMessage('');
       await persistFlowchart();
-      setJustSaved(true);
-
-      if (saveStatusTimeoutRef.current) {
-        window.clearTimeout(saveStatusTimeoutRef.current);
-      }
-
-      saveStatusTimeoutRef.current = window.setTimeout(() => setJustSaved(false), 2000);
+      setSaveStatus('saved');
+      notify('Diagram saved locally.', 'success');
     } catch (error) {
       console.error('Save failed:', error);
-      setErrorMessage(getErrorMessage(error, 'Failed to save this flowchart.'));
-    } finally {
-      setIsSaving(false);
+      setSaveStatus('error');
+      const message = getErrorMessage(error, 'Unable to save this diagram in the browser.');
+      setErrorMessage(message);
+      notify(message, 'error');
     }
-  }, [id, persistFlowchart]);
+  }, [id, notify, persistFlowchart]);
 
   const handleCanvasClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (selectionStartedRef.current) {
@@ -883,19 +867,21 @@ export function Editor() {
   }, []);
 
   const createNodeDraft = useCallback((type: FlowChartNode['type'], position: Position, overrides?: Partial<FlowChartNode>): FlowChartNode => {
+    const defaults = getNodeDefaults(type);
     const defaultStyle = defaultNodeStyles[type];
 
     const draft: FlowChartNode = {
       id: overrides?.id ?? createId('node'),
       type,
       position: snapPosition(position),
-      text: overrides?.text ?? getDefaultText(type),
-      width: overrides?.width ?? getDefaultWidth(type),
-      height: overrides?.height ?? getDefaultHeight(type),
+      text: overrides?.text ?? defaults.text,
+      width: overrides?.width ?? defaults.width,
+      height: overrides?.height ?? defaults.height,
     };
 
     if (defaultStyle || overrides?.style) {
       draft.style = {
+        ...(defaults.style ?? {}),
         ...(defaultStyle ?? {}),
         ...(overrides?.style ?? {})
       };
@@ -962,8 +948,7 @@ export function Editor() {
       return;
     }
 
-    const width = getDefaultWidth(type);
-    const height = getDefaultHeight(type);
+    const { width, height } = getNodeDefaults(type);
     const nextNodeId = createId('node');
     const nextNode = createNodeDraft(type, {
       x: Math.max(48, connectorQuickAdd.position.x - width / 2),
@@ -998,7 +983,8 @@ export function Editor() {
   }
 
   const handleExport = useCallback(async (format: 'png' | 'svg' | 'json' | 'pdf', options?: { transparent?: boolean }) => {
-    switch (format) {
+    try {
+      switch (format) {
       case 'json': {
         const exportData = { ...flowChart, name: flowchartName };
         const dataStr = JSON.stringify(exportData, null, 2);
@@ -1033,10 +1019,25 @@ export function Editor() {
         pdf.save(`${flowchartName.replace(/\s+/g, '_').trim() || 'flowchart'}.pdf`);
         break;
       }
+      }
+      notify(`${format.toUpperCase()} export complete.`, 'success');
+    } catch (error) {
+      const message = getErrorMessage(error, `Unable to export this diagram as ${format.toUpperCase()}.`);
+      setErrorMessage(message);
+      notify(message, 'error');
     }
-  }, [flowChart, flowchartName]);
+  }, [flowChart, flowchartName, notify]);
 
   const handleImport = (file: File) => {
+    try {
+      validateImportFileSize(file);
+    } catch (error) {
+      const message = getErrorMessage(error, 'The selected file is too large to import.');
+      setErrorMessage(message);
+      notify(message, 'error');
+      return;
+    }
+
     const reader = new FileReader();
 
     reader.onload = (event) => {
@@ -1059,57 +1060,39 @@ export function Editor() {
         setErrorMessage('');
         setShowCanvasHints(false);
         scheduleScrollToNodes(positionedNodes);
+        notify('Diagram imported successfully.', 'success');
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, 'Invalid file format. Please select a valid JSON file.'));
+        const message = getErrorMessage(error, 'Invalid file format. Please select a valid JSON file.');
+        setErrorMessage(message);
+        notify(message, 'error');
       }
+    };
+
+    reader.onerror = () => {
+      const message = 'The selected file could not be read. Please try another JSON file.';
+      setErrorMessage(message);
+      notify(message, 'error');
     };
 
     reader.readAsText(file);
   };
 
-  const handleAIGenerate = async () => {
-    if (!aiDescription.trim() || isGenerating) {
-      return;
-    }
-
-    setIsGenerating(true);
-
-    try {
-      setErrorMessage('');
-      const result = await aiService.generateFlowChart({
-        description: aiDescription,
-        style: 'simple'
-      });
-
-      const generatedFlowchart = materializeAIFlowChart(result);
-      replaceFlowChartContent(generatedFlowchart);
-      setSelectedConnection(null);
-      setDragConnector(null);
-      setConnectorQuickAdd(null);
-      setShowCanvasHints(false);
-      scheduleScrollToNodes(generatedFlowchart.nodes);
-
-      if (!flowChart.nodes.length || flowchartName === 'Untitled Flowchart') {
-        setFlowchartName(result.title);
-      }
-
-      setAiDescription('');
-    } catch (error) {
-      console.error('AI generation failed:', error);
-      setErrorMessage(getErrorMessage(error, 'Failed to generate a flowchart. Please try again.'));
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleClearAll = () => {
+  const clearBoard = useCallback(() => {
     clearAll();
     setSelectedNodeIds([]);
     setSelectedConnection(null);
     setDragConnector(null);
     setConnectorQuickAdd(null);
     scheduleScrollToNodes([]);
-  };
+  }, [clearAll, scheduleScrollToNodes]);
+
+  const handleClearAll = useCallback(() => {
+    if (!flowChart.nodes.length && !flowChart.connections.length) {
+      return;
+    }
+
+    setPendingDestructiveAction('clearBoard');
+  }, [flowChart.connections.length, flowChart.nodes.length]);
 
   const addNodeAtPosition = useCallback((type: FlowChartNode['type'], position: Position, overrides?: Partial<FlowChartNode>) => {
     const node = createNodeDraft(type, position, overrides);
@@ -1153,6 +1136,18 @@ export function Editor() {
     setNodeSelection([nextId], nextId);
   }, [addNodeAtPosition, getSuggestedNodePosition, setNodeSelection]);
 
+  const useApprovalStarter = useCallback(() => {
+    const starter = getStarterDiagramDraft('approval');
+    const { nodes, connections } = applyWorkspacePadding(starter.nodes ?? [], starter.connections ?? []);
+    replaceFlowChartContent({ name: starter.name, nodes, connections });
+    setFlowchartName(starter.name ?? 'Approval Process');
+    setSelectedNodeIds([]);
+    setSelectedConnection(null);
+    setShowCanvasHints(false);
+    scheduleScrollToNodes(nodes);
+    notify('Approval starter added.', 'success');
+  }, [notify, replaceFlowChartContent, scheduleScrollToNodes]);
+
   function saveSelectedNodeStyleAsDefault() {
     if (!selectedNodeData?.style) {
       return;
@@ -1163,11 +1158,6 @@ export function Editor() {
       [selectedNodeData.type]: { ...selectedNodeData.style }
     }));
   }
-
-  const focusAIComposer = useCallback(() => {
-    aiTextareaRef.current?.focus();
-    aiTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, []);
 
   const nodeTypes: WorkspaceNodeType[] = [
     {
@@ -1274,12 +1264,6 @@ export function Editor() {
     ['process', 'decision', 'end', 'annotation'].includes(nodeType.type)
   );
 
-  const starterPrompts = [
-    'Customer onboarding from signup to activation',
-    'Bug triage workflow for a product team',
-    'Order fulfillment with payment, packing, and shipping',
-    'Hiring pipeline from application to offer'
-  ];
   const commandMenuItems: CommandMenuItem[] = [
     ...nodeTypes.map((nodeType) => ({
       id: `add-${nodeType.type}`,
@@ -1383,12 +1367,6 @@ export function Editor() {
       id: 'toggle-hints',
       title: showCanvasHints ? 'Hide canvas hints' : 'Show canvas hints',
       description: 'Reduce or restore the canvas helper overlays.'
-    },
-    {
-      id: 'focus-ai',
-      title: 'Focus AI composer',
-      description: 'Jump straight to the AI prompt field.',
-      shortcut: '/'
     },
     {
       id: 'toggle-theme',
@@ -1628,9 +1606,6 @@ export function Editor() {
         break;
       case 'toggle-hints':
         setShowCanvasHints((current) => !current);
-        break;
-      case 'focus-ai':
-        focusAIComposer();
         break;
       case 'toggle-theme':
         setWorkspaceTheme((current) => (current === 'dark' ? 'light' : 'dark'));
@@ -2193,7 +2168,7 @@ export function Editor() {
     }));
   }, [selectedNodeIds, transformFlowChart]);
 
-  const deleteSelectedNodes = useCallback(() => {
+  const deleteSelectedNodesImmediately = useCallback(() => {
     const removableNodeIds = selectedNodesData.filter((node) => !node.locked).map((node) => node.id);
 
     if (!removableNodeIds.length) {
@@ -2212,6 +2187,29 @@ export function Editor() {
     setSelectedNodeIds((previous) => previous.filter((nodeId) => !removableNodeIdSet.has(nodeId)));
     setSelectedNode(null);
   }, [selectedNodesData, setSelectedNode, transformFlowChart]);
+
+  const deleteSelectedNodes = useCallback(() => {
+    const removableNodeCount = selectedNodesData.filter((node) => !node.locked).length;
+
+    if (removableNodeCount > 1) {
+      setPendingDestructiveAction('deleteSelectedNodes');
+      return;
+    }
+
+    deleteSelectedNodesImmediately();
+  }, [deleteSelectedNodesImmediately, selectedNodesData]);
+
+  const handleConfirmDestructiveAction = useCallback(() => {
+    if (pendingDestructiveAction === 'clearBoard') {
+      clearBoard();
+    }
+
+    if (pendingDestructiveAction === 'deleteSelectedNodes') {
+      deleteSelectedNodesImmediately();
+    }
+
+    setPendingDestructiveAction(null);
+  }, [clearBoard, deleteSelectedNodesImmediately, pendingDestructiveAction]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2233,6 +2231,22 @@ export function Editor() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         handleManualSave();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
         return;
       }
 
@@ -2373,6 +2387,11 @@ export function Editor() {
       }
 
       if (event.key === 'Escape') {
+        if (presentationMode) {
+          setPresentationMode(false);
+          return;
+        }
+
         closeCommandMenu();
         setConnectorQuickAdd(null);
         setDragConnector(null);
@@ -2394,31 +2413,22 @@ export function Editor() {
         return;
       }
 
-      if (selectedNodeIds.length) {
-        const step = event.shiftKey ? GRID_SIZE : 8;
+      const nudge = getKeyboardNudge(event.key, event.shiftKey);
 
-        if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          nudgeSelectedNodes(0, -step);
+      if (nudge) {
+        event.preventDefault();
+
+        if (selectedNodeIds.length) {
+          nudgeSelectedNodes(nudge.x, nudge.y);
           return;
         }
 
-        if (event.key === 'ArrowRight') {
-          event.preventDefault();
-          nudgeSelectedNodes(step, 0);
-          return;
-        }
-
-        if (event.key === 'ArrowDown') {
-          event.preventDefault();
-          nudgeSelectedNodes(0, step);
-          return;
-        }
-
-        if (event.key === 'ArrowLeft') {
-          event.preventDefault();
-          nudgeSelectedNodes(-step, 0);
-        }
+        const viewportPan = getKeyboardViewportPan(event.key);
+        workspaceViewportRef.current?.scrollBy({
+          left: viewportPan?.x ?? 0,
+          top: viewportPan?.y ?? 0,
+          behavior: 'auto'
+        });
       }
     };
 
@@ -2448,9 +2458,10 @@ export function Editor() {
     selectedConnectionData,
     selectedNodeData,
     selectedNodeIds,
-    setSelectedNode,
     ungroupSelection,
-    transformFlowChart
+    presentationMode,
+    redo,
+    undo
   ]);
 
   useEffect(() => {
@@ -2474,54 +2485,6 @@ export function Editor() {
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable
-      ) {
-        return;
-      }
-
-      if (event.key === 'Escape' && presentationMode) {
-        setPresentationMode(false);
-        return;
-      }
-
-      const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key);
-      if (isArrowKey) {
-        event.preventDefault();
-        const step = event.shiftKey ? 10 : 1;
-        
-        if (selectedNodeIds.length > 0) {
-          const deltaX = event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0;
-          const deltaY = event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0;
-          
-          transformFlowChart((prev) => ({
-            ...prev,
-            nodes: prev.nodes.map((node) => 
-              selectedNodeIds.includes(node.id)
-                ? { ...node, position: { x: node.position.x + deltaX, y: node.position.y + deltaY } }
-                : node
-            ),
-            updatedAt: new Date()
-          }));
-        } else {
-          const deltaX = event.key === 'ArrowRight' ? 20 : event.key === 'ArrowLeft' ? -20 : 0;
-          const deltaY = event.key === 'ArrowDown' ? 20 : event.key === 'ArrowUp' ? -20 : 0;
-          if (workspaceViewportRef.current) {
-            workspaceViewportRef.current.scrollBy({ left: deltaX, top: deltaY, behavior: 'auto' });
-          }
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNodeIds, transformFlowChart, presentationMode]);
-
   if (loading) {
     return (
       <div className={`flex min-h-screen items-center justify-center px-6 ${loadingShellClass}`}>
@@ -2544,20 +2507,43 @@ export function Editor() {
     );
   }
 
+  if (missingFlowchart) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[var(--wf-bg)] px-5 py-10">
+        <section className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl" aria-labelledby="missing-diagram-title">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-700"><Square className="h-6 w-6" aria-hidden="true" /></div>
+          <h1 id="missing-diagram-title" className="mt-5 text-3xl font-bold tracking-tight text-slate-950">Diagram not found</h1>
+          <p className="mt-3 leading-7 text-slate-600">This local diagram may have been deleted or belongs to another browser profile.</p>
+          <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+            <button type="button" onClick={() => navigate('/dashboard')} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200">Back to dashboard</button>
+            <button type="button" onClick={() => { void flowchartService.createFlowchart(getStarterDiagramDraft('blank')).then((diagram) => navigate(`/editor/${diagram.id}`, { replace: true })).catch((error) => setErrorMessage(getErrorMessage(error, 'Unable to create a local diagram.'))); }} className="rounded-xl bg-violet-700 px-5 py-3 font-semibold text-white hover:bg-violet-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300">Create new diagram</button>
+          </div>
+          {errorMessage && <p role="alert" className="mt-5 text-sm text-rose-700">{errorMessage}</p>}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className={`h-screen overflow-hidden ${shellClass}`}>
-      <FeedbackModal 
-        isOpen={showFeedbackModal} 
-        onClose={() => setShowFeedbackModal(false)} 
+      <ConfirmModal
+        isOpen={pendingDestructiveAction !== null}
+        title={pendingDestructiveAction === 'clearBoard' ? 'Clear board' : 'Delete selected nodes'}
+        message={
+          pendingDestructiveAction === 'clearBoard'
+            ? `This will permanently remove all ${flowChart.nodes.length} nodes and ${flowChart.connections.length} connections from this board.`
+            : `This will permanently remove ${selectedNodesData.filter((node) => !node.locked).length} selected nodes and their connected lines.`
+        }
+        confirmText={pendingDestructiveAction === 'clearBoard' ? 'Clear board' : 'Delete nodes'}
+        cancelText="Keep editing"
+        onConfirm={handleConfirmDestructiveAction}
+        onCancel={() => setPendingDestructiveAction(null)}
       />
-      <div className="flex h-full min-h-0 flex-col xl:flex-row">
+      <div className="flex h-full min-h-0 flex-col lg:flex-row">
         {!isLeftRailCollapsed && !presentationMode && (
           <EditorToolRail
             nodeTypes={toolRailNodeTypes}
             addNodeFromPalette={addNodeFromPalette}
-            onFocusAI={focusAIComposer}
-            onImport={() => fileInputRef.current?.click()}
-            onExportJson={() => handleExport('json')}
             workspaceTheme={workspaceTheme}
             onClose={() => setIsLeftRailCollapsed(true)}
           />
@@ -2565,28 +2551,26 @@ export function Editor() {
 
         <main className={`min-h-0 min-w-0 flex-1 ${mainClass}`}>
           <div className="flex h-full min-w-0 flex-col">
-            {!presentationMode && !isTopBarCollapsed && <EditorTopBar
-              onClose={() => setIsTopBarCollapsed(true)}
+            {!presentationMode && <EditorTopBar
               flowchartName={flowchartName}
               onNameChange={setFlowchartName}
-              onBack={() => navigate('/')}
+              onBack={() => navigate('/dashboard')}
               onUndo={undo}
               onRedo={redo}
-              onSave={handleManualSave}
               canUndo={canUndo}
               canRedo={canRedo}
-              isSaving={isSaving || !id}
-              justSaved={justSaved}
-              nodeCount={flowChart.nodes.length}
-              connectionCount={flowChart.connections.length}
-              isLinking={dragConnector !== null}
+              saveStatus={saveStatus}
               workspaceTheme={workspaceTheme}
               onThemeChange={setWorkspaceTheme}
+              onImport={() => fileInputRef.current?.click()}
               onExportPng={(transparent) => void handleExport('png', { transparent })}
               onExportSvg={(transparent) => void handleExport('svg', { transparent })}
               onExportPdf={() => void handleExport('pdf')}
               onExportJson={() => void handleExport('json')}
               onPresent={() => setPresentationMode(true)}
+              onClearBoard={handleClearAll}
+              showHints={showCanvasHints}
+              onToggleHints={() => setShowCanvasHints((current) => !current)}
             />}
 
             <div className={`relative min-h-[560px] flex-1 overflow-hidden ${canvasShellClass}`}>
@@ -2595,32 +2579,22 @@ export function Editor() {
                 connectingNodeLabel={connectingNodeLabel}
                 zoomLabel={zoomLabel}
                 showHints={showCanvasHints}
+                showMinimap={showMinimap}
                 onZoomIn={handleZoomIn}
                 onZoomOut={handleZoomOut}
                 onResetZoom={handleResetZoom}
                 onFitCanvas={() => scheduleScrollToNodes(flowChart.nodes)}
                 onFitSelection={fitSelection}
+                onToggleMinimap={() => setShowMinimap((current) => !current)}
+                onAddNode={addNodeFromPalette}
+                onUseStarterTemplate={useApprovalStarter}
                 workspaceTheme={workspaceTheme}
               />
-
-              {isTopBarCollapsed && !presentationMode && (
-                <button
-                  onClick={() => setIsTopBarCollapsed(false)}
-                  className={`absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur ${
-                    isDarkWorkspace
-                      ? 'border-white/10 bg-[#17191d]/92 text-slate-200 hover:border-white/20 hover:bg-[#1b1d22]'
-                      : 'border-white/80 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white'
-                  }`}
-                  title="Show header"
-                >
-                  Show header
-                </button>
-              )}
 
               {isLeftRailCollapsed && (
                 <button
                   onClick={() => setIsLeftRailCollapsed(false)}
-                  className={`absolute left-4 top-1/2 z-40 hidden -translate-y-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur xl:inline-flex ${
+                  className={`absolute left-4 top-1/2 z-40 inline-flex -translate-y-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur ${
                     isDarkWorkspace
                       ? 'border-white/10 bg-[#17191d]/92 text-slate-200 hover:border-white/20 hover:bg-[#1b1d22]'
                       : 'border-white/80 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white'
@@ -2634,7 +2608,7 @@ export function Editor() {
               {isRightSidebarCollapsed && (
                 <button
                   onClick={() => setIsRightSidebarCollapsed(false)}
-                  className={`absolute right-4 top-1/2 z-40 hidden -translate-y-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur xl:inline-flex ${
+                  className={`absolute right-4 top-1/2 z-40 inline-flex -translate-y-1/2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-lg backdrop-blur ${
                     isDarkWorkspace
                       ? 'border-white/10 bg-[#17191d]/92 text-slate-200 hover:border-white/20 hover:bg-[#1b1d22]'
                       : 'border-white/80 bg-white/92 text-slate-700 hover:border-slate-300 hover:bg-white'
@@ -2982,7 +2956,7 @@ export function Editor() {
                 </div>
               </div>
 
-              {!presentationMode && <EditorMinimap
+              {!presentationMode && showMinimap && <EditorMinimap
                 nodes={flowChart.nodes}
                 workspaceWidth={workspaceMetrics.width}
                 workspaceHeight={workspaceMetrics.height}
@@ -3011,16 +2985,6 @@ export function Editor() {
         {!isRightSidebarCollapsed && !presentationMode && (
           <EditorSidebar
             errorMessage={errorMessage}
-            aiDescription={aiDescription}
-            onAiDescriptionChange={setAiDescription}
-            starterPrompts={starterPrompts}
-            onStarterPromptClick={(prompt) => {
-              setAiDescription(prompt);
-              aiTextareaRef.current?.focus();
-            }}
-            onGenerate={handleAIGenerate}
-            isGenerating={isGenerating}
-            aiTextareaRef={aiTextareaRef}
             nodeTypes={nodeTypes}
             addNodeFromPalette={addNodeFromPalette}
             selectedNodeData={selectedNodeData}
@@ -3096,15 +3060,13 @@ export function Editor() {
                 updateConnection(selectedConnectionData.id, { waypoints: undefined });
               }
             }}
-            onImport={() => fileInputRef.current?.click()}
-            onExportJson={() => handleExport('json')}
-            onExportPng={() => void handleExport('png')}
-            onExportSvg={() => void handleExport('svg')}
-            onExportPdf={() => void handleExport('pdf')}
-            onClearBoard={handleClearAll}
             onClose={() => setIsRightSidebarCollapsed(true)}
             onSaveNodeStyleAsDefault={saveSelectedNodeStyleAsDefault}
             workspaceTheme={workspaceTheme}
+            onWorkspaceThemeChange={setWorkspaceTheme}
+            showCanvasHints={showCanvasHints}
+            onShowCanvasHintsChange={setShowCanvasHints}
+            onFitCanvas={() => scheduleScrollToNodes(flowChart.nodes)}
           />
         )}
       </div>
@@ -3123,50 +3085,9 @@ export function Editor() {
         }}
         className="hidden"
       />
+      {toast && <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />}
     </div>
   );
-}
-
-function materializeAIFlowChart(result: AIFlowChartResponse): {
-  nodes: FlowChartNode[];
-  connections: Connection[];
-} {
-  const rawNodes = result.nodes.map((node) => ({
-    ...node,
-    id: createId('node'),
-    position: { ...node.position },
-    style: node.style ? { ...node.style } : undefined
-  }));
-  const nodes = ensureWorkspacePadding(rawNodes).map((node, index) => ({
-    ...node,
-    zIndex: index + 1
-  }));
-
-  const connections = result.connections.flatMap((connection) => {
-    const fromNode = nodes[connection.fromIndex];
-    const toNode = nodes[connection.toIndex];
-
-    if (!fromNode || !toNode) {
-      return [];
-    }
-
-    return [
-      {
-        id: createId('connection'),
-        from: fromNode.id,
-        to: toNode.id,
-        fromSide: connection.fromSide,
-        toSide: connection.toSide,
-        type: 'curved' as const,
-        startMarker: 'none' as const,
-        endMarker: 'arrow' as const,
-        labelPosition: 0.5,
-        ...(connection.label ? { label: connection.label } : {})
-      }
-    ];
-  });
-
-  return { nodes, connections };
 }
 
 function parseImportedFlowChart(
@@ -3182,13 +3103,19 @@ function parseImportedFlowChart(
   }
 
   const parsed = JSON.parse(fileContents) as unknown;
+  validateImportedDiagram(parsed);
 
-  if (!isRecord(parsed) || !Array.isArray(parsed.nodes)) {
+  if (!isRecord(parsed)) {
+    throw new Error('This file does not contain a valid flowchart.');
+  }
+
+  const parsedNodes = parsed.nodes;
+  if (!Array.isArray(parsedNodes)) {
     throw new Error('This file does not contain a valid flowchart.');
   }
 
   const usedNodeIds = new Set<string>();
-  const nodes = parsed.nodes.map((node, index) => normalizeImportedNode(node, index, usedNodeIds));
+  const nodes = parsedNodes.map((node, index) => normalizeImportedNode(node, index, usedNodeIds));
   const nodeIds = new Set(nodes.map((node) => node.id));
   const rawConnections = Array.isArray(parsed.connections) ? parsed.connections : [];
   const usedConnectionIds = new Set<string>();
@@ -3520,8 +3447,8 @@ function normalizeImportedNode(
       typeof node.text === 'string' && node.text.trim()
         ? node.text.trim()
         : `Imported node ${index + 1}`,
-    width: toFiniteNumber(node.width, getDefaultWidth(type)),
-    height: toFiniteNumber(node.height, getDefaultHeight(type)),
+    width: toFiniteNumber(node.width, getNodeDefaults(type).width),
+    height: toFiniteNumber(node.height, getNodeDefaults(type).height),
     ...(typeof node.groupId === 'string' && node.groupId.trim() ? { groupId: node.groupId.trim() } : {}),
     ...(typeof node.zIndex === 'number' && Number.isFinite(node.zIndex) ? { zIndex: node.zIndex } : {}),
     ...(typeof node.locked === 'boolean' ? { locked: node.locked } : {}),
@@ -3567,7 +3494,7 @@ function normalizeImportedConnection(
     startMarker: isConnectionMarker(connection.startMarker) ? connection.startMarker : 'none',
     endMarker: isConnectionMarker(connection.endMarker) ? connection.endMarker : 'arrow',
     ...(typeof connection.color === 'string' && connection.color.trim()
-      ? { color: connection.color.trim() }
+      ? { color: safeSvgColor(connection.color, '#64748b') }
       : {}),
     ...(typeof connection.label === 'string' && connection.label.trim()
       ? { label: connection.label.trim() }
@@ -3596,19 +3523,19 @@ function normalizeNodeStyle(style: unknown): FlowChartNode['style'] | undefined 
   const normalizedStyle: FlowChartNode['style'] = {};
 
   if (typeof style.backgroundColor === 'string' && style.backgroundColor.trim()) {
-    normalizedStyle.backgroundColor = style.backgroundColor;
+    normalizedStyle.backgroundColor = safeSvgColor(style.backgroundColor, '#ffffff');
   }
 
   if (typeof style.borderColor === 'string' && style.borderColor.trim()) {
-    normalizedStyle.borderColor = style.borderColor;
+    normalizedStyle.borderColor = safeSvgColor(style.borderColor, '#cbd5e1');
   }
 
   if (typeof style.color === 'string' && style.color.trim()) {
-    normalizedStyle.color = style.color;
+    normalizedStyle.color = safeSvgColor(style.color, '#0f172a');
   }
 
   if (typeof style.textColor === 'string' && style.textColor.trim()) {
-    normalizedStyle.textColor = style.textColor;
+    normalizedStyle.textColor = safeSvgColor(style.textColor, '#0f172a');
   }
 
   if (style.borderStyle === 'solid' || style.borderStyle === 'dashed' || style.borderStyle === 'none') {
@@ -3673,84 +3600,6 @@ function isConnectionMarker(value: unknown): value is NonNullable<Connection['st
 
 function toFiniteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function getDefaultText(type: FlowChartNode['type']): string {
-  switch (type) {
-    case 'start':
-      return 'Start';
-    case 'process':
-      return 'Process Step';
-    case 'decision':
-      return 'Decision?';
-    case 'end':
-      return 'End';
-    case 'connector':
-      return 'Connector';
-    case 'input':
-      return 'Input / Output';
-    case 'manualInput':
-      return 'Manual Input';
-    case 'manualOperation':
-      return 'Manual Operation';
-    case 'triangle':
-      return 'Marker';
-    case 'hexagon':
-      return 'Preparation';
-    case 'database':
-      return 'Database';
-    case 'annotation':
-      return 'Annotation';
-    default:
-      return 'Node';
-  }
-}
-
-function getDefaultWidth(type: FlowChartNode['type']): number {
-  switch (type) {
-    case 'start':
-    case 'end':
-      return 132;
-    case 'decision':
-      return 120;
-    case 'connector':
-      return 80;
-    case 'input':
-      return 160;
-    case 'manualInput':
-      return 150;
-    case 'manualOperation':
-      return 160;
-    case 'triangle':
-      return 110;
-    case 'hexagon':
-      return 150;
-    case 'database':
-      return 150;
-    case 'annotation':
-      return 180;
-    default:
-      return 140;
-  }
-}
-
-function getDefaultHeight(type: FlowChartNode['type']): number {
-  switch (type) {
-    case 'start':
-    case 'end':
-    case 'connector':
-      return 60;
-    case 'manualInput':
-      return 88;
-    case 'triangle':
-      return 96;
-    case 'database':
-      return 96;
-    case 'annotation':
-      return 92;
-    default:
-      return 80;
-  }
 }
 
 function getNextNodeZIndex(nodes: FlowChartNode[]): number {

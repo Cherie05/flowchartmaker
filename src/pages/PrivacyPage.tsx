@@ -1,57 +1,42 @@
-import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { CustomCursor } from '../components/CustomCursor';
+import { Link } from 'react-router-dom';
 
 export function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-[#efe8dc] text-slate-900 font-sans cursor-none py-20 px-8">
-      <CustomCursor />
-      <div className="max-w-3xl mx-auto bg-white p-12 rounded-3xl shadow-sm border border-slate-200">
-        <Link to="/" className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Home
+    <main className="min-h-screen bg-[var(--wf-bg)] px-4 py-12 text-slate-900 sm:px-8 sm:py-20">
+      <article className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-12">
+        <Link
+          to="/"
+          className="mb-8 inline-flex items-center gap-2 font-medium text-violet-700 transition hover:text-violet-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to home
         </Link>
-        
-        <h1 className="text-4xl font-black mb-8 uppercase tracking-tighter">Privacy Policy</h1>
-        
-        <div className="prose prose-slate max-w-none">
-          <p className="text-lg text-slate-600 mb-6">
-            Last updated: {new Date().toLocaleDateString()}
-          </p>
 
-          <h2 className="text-2xl font-bold mt-8 mb-4">1. Information We Collect</h2>
-          <p className="mb-4">
-            We only collect the information you choose to give us, such as your name and email address when you join our waitlist or authenticate to use the editor.
-          </p>
+        <h1 className="mb-8 text-4xl font-bold tracking-tight">Privacy</h1>
+        <p className="mb-8 text-lg leading-8 text-slate-600">
+          Wizzleflow is designed as a direct-access, local-first diagram editor.
+        </p>
 
-          <h2 className="text-2xl font-bold mt-8 mb-4">2. How We Use Your Information</h2>
-          <p className="mb-4">
-            We use the information we collect in various ways, including to:
-          </p>
-          <ul className="list-disc pl-6 mb-4">
-            <li>Provide, operate, and maintain our website</li>
-            <li>Improve, personalize, and expand our website</li>
-            <li>Understand and analyze how you use our website</li>
-            <li>Develop new products, services, features, and functionality</li>
-            <li>Communicate with you, either directly or through one of our partners, including for customer service, to provide you with updates and other information relating to the website.</li>
-          </ul>
-
-          <h2 className="text-2xl font-bold mt-8 mb-4">3. Log Files</h2>
-          <p className="mb-4">
-            Wizzleflow follows a standard procedure of using log files. These files log visitors when they visit websites. All hosting companies do this and a part of hosting services' analytics. The information collected by log files include internet protocol (IP) addresses, browser type, Internet Service Provider (ISP), date and time stamp, referring/exit pages, and possibly the number of clicks.
-          </p>
-
-          <h2 className="text-2xl font-bold mt-8 mb-4">4. Cookies and Web Beacons</h2>
-          <p className="mb-4">
-            Like any other website, Wizzleflow uses 'cookies'. These cookies are used to store information including visitors' preferences, and the pages on the website that the visitor accessed or visited. The information is used to optimize the users' experience by customizing our web page content based on visitors' browser type and/or other information.
-          </p>
-
-          <h2 className="text-2xl font-bold mt-8 mb-4">5. Consent</h2>
-          <p className="mb-4">
-            By using our website, you hereby consent to our Privacy Policy and agree to its Terms and Conditions.
-          </p>
+        <div className="space-y-8 leading-7 text-slate-700">
+          <section>
+            <h2 className="mb-3 text-2xl font-semibold text-slate-900">No account or email required</h2>
+            <p>Wizzleflow does not require an account, name, or email address to use the workspace.</p>
+          </section>
+          <section>
+            <h2 className="mb-3 text-2xl font-semibold text-slate-900">Local diagram storage</h2>
+            <p>Diagrams and workspace preferences are stored in your browser's local storage on the device you use. They are not automatically synchronized to another browser or device.</p>
+          </section>
+          <section>
+            <h2 className="mb-3 text-2xl font-semibold text-slate-900">Backups and deletion</h2>
+            <p>Clearing browser storage can permanently remove saved diagrams. Export important diagrams regularly so you have a backup you control.</p>
+          </section>
+          <section>
+            <h2 className="mb-3 text-2xl font-semibold text-slate-900">Website delivery</h2>
+            <p>The website host and externally loaded assets, such as fonts, may receive standard network request information. The Wizzleflow application does not send diagram content to a diagram-storage service.</p>
+          </section>
         </div>
-      </div>
-    </div>
+      </article>
+    </main>
   );
 }

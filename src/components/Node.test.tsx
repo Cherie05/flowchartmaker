@@ -9,24 +9,33 @@ describe('Node', () => {
     type: 'process',
     position: { x: 100, y: 100 },
     text: 'Test Node',
+    width: 140,
+    height: 80,
     style: {},
   };
 
   it('renders the node text', () => {
     render(
-      <svg>
-        <Node
-          node={mockNode}
-          selected={false}
-          onSelect={vi.fn()}
-          onDrag={vi.fn()}
-          onDragStart={vi.fn()}
-          onDragEnd={vi.fn()}
-          onTextChange={vi.fn()}
-          isLocked={false}
-          onConnectStart={vi.fn()}
-        />
-      </svg>
+      <Node
+        node={mockNode}
+        isSelected={false}
+        isConnectorTarget={false}
+        showControls={false}
+        showConnectionHandles={false}
+        isDragging={false}
+        zoom={1}
+        workspaceTheme="light"
+        onSelect={vi.fn()}
+        onDrag={vi.fn()}
+        onDragStart={vi.fn()}
+        onDragEnd={vi.fn()}
+        onResizeStart={vi.fn()}
+        onResize={vi.fn()}
+        onResizeEnd={vi.fn()}
+        onTextChange={vi.fn()}
+        onDelete={vi.fn()}
+        onConnectStart={vi.fn()}
+      />
     );
 
     expect(screen.getByText('Test Node')).toBeInTheDocument();

@@ -1,12 +1,9 @@
-import { Bot, FileJson, MousePointer2, Upload, ChevronLeft } from 'lucide-react';
+import { MousePointer2, ChevronLeft } from 'lucide-react';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
 interface EditorToolRailProps {
   nodeTypes: WorkspaceNodeType[];
   addNodeFromPalette: (type: WorkspaceNodeType['type']) => void;
-  onFocusAI: () => void;
-  onImport: () => void;
-  onExportJson: () => void;
   workspaceTheme: WorkspaceTheme;
   onClose: () => void;
 }
@@ -14,9 +11,6 @@ interface EditorToolRailProps {
 export function EditorToolRail({
   nodeTypes,
   addNodeFromPalette,
-  onFocusAI,
-  onImport,
-  onExportJson,
   workspaceTheme,
   onClose
 }: EditorToolRailProps) {
@@ -38,7 +32,8 @@ export function EditorToolRail({
 
   return (
     <aside
-      className={`hidden h-full w-[92px] shrink-0 border-r xl:flex xl:flex-col ${
+      aria-label="Diagram tools"
+      className={`hidden h-full w-[88px] shrink-0 border-r lg:flex lg:flex-col ${
         isDark ? 'border-white/8 bg-[#151517]' : 'border-slate-200/80 bg-[#f4efe6]'
       }`}
     >
@@ -46,6 +41,7 @@ export function EditorToolRail({
         <div className="mb-4 flex flex-col items-center gap-3">
           <button 
             onClick={onClose}
+            aria-label="Hide diagram tools"
             className={`p-2 rounded-full mb-2 transition ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-black/5 text-slate-500'}`}
             title="Hide tools"
           >
@@ -60,23 +56,15 @@ export function EditorToolRail({
           >
             <MousePointer2 className="h-5 w-5" />
           </div>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Tools</span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-600">Select</span>
         </div>
 
         <div className="flex w-full flex-col gap-2">
-          <button
-            onClick={onFocusAI}
-            className="flex flex-col items-center gap-1.5 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-orange-100 transition hover:border-orange-400/40 hover:bg-orange-500/15"
-            title="Generate with AI"
-          >
-            <Bot className="h-5 w-5 text-orange-400" />
-            AI
-          </button>
-
           {nodeTypes.map(({ type, icon: Icon, label, iconColor, surfaceClass }) => (
             <button
               key={type}
               onClick={() => addNodeFromPalette(type)}
+              aria-label={`Add ${label} node`}
               className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-800 transition hover:-translate-y-0.5 ${surfaceClass}`}
               title={`Add ${label}`}
             >
@@ -86,34 +74,6 @@ export function EditorToolRail({
           ))}
         </div>
 
-        <div className={`mt-auto border-t pt-3 ${isDark ? 'border-white/8' : 'border-slate-200/80'}`}>
-          <div className="flex w-full flex-col gap-2">
-            <button
-              onClick={onImport}
-              className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition hover:-translate-y-0.5 ${
-                isDark
-                  ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
-                  : 'border-slate-200 bg-white/90 text-slate-700 hover:border-slate-300 hover:bg-white'
-              }`}
-              title="Import JSON"
-            >
-              <Upload className={`h-5 w-5 ${isDark ? 'text-slate-300' : 'text-slate-500'}`} />
-              Load
-            </button>
-            <button
-              onClick={onExportJson}
-              className={`flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition hover:-translate-y-0.5 ${
-                isDark
-                  ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
-                  : 'border-slate-200 bg-white/90 text-slate-700 hover:border-slate-300 hover:bg-white'
-              }`}
-              title="Export JSON"
-            >
-              <FileJson className={`h-5 w-5 ${isDark ? 'text-slate-300' : 'text-slate-500'}`} />
-              Save
-            </button>
-          </div>
-        </div>
       </div>
     </aside>
   );

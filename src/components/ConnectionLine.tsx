@@ -212,7 +212,7 @@ export function ConnectionLine({
   }));
 
   return (
-    <g className="connection-group">
+    <g className="connection-group" data-connection-id={connection.id}>
       <path
         d={path}
         stroke="transparent"

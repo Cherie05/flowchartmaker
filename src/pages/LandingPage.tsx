@@ -1,10 +1,9 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
+import { motion, useScroll, useTransform, type Variants } from 'framer-motion';
 import { ReactLenis } from 'lenis/react';
 import {
   ArrowRight,
-  CheckCircle2,
   Layers,
   Zap,
   ExternalLink,
@@ -13,17 +12,10 @@ import {
   Heart,
   Github
 } from 'lucide-react';
-import { CustomCursor } from '../components/CustomCursor';
-import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 
 export function LandingPage() {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [submitError, setSubmitError] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { scrollYProgress } = useScroll({
@@ -35,40 +27,7 @@ export function LandingPage() {
   const yText = useTransform(scrollYProgress, [0, 1], ['0%', '20%']);
   const opacityFade = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
-  const handleWaitlistSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !email) return;
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setSubmitError('Please enter a valid email address.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitError('');
-
-    try {
-      const { error } = await supabase.from('waitlist').insert([{ name, email }]);
-      if (error) throw error;
-      setIsSubmitted(true);
-      setEmail('');
-    } catch (err: unknown) {
-      console.error(err);
-      const pgError = err as { code?: string; message?: string };
-      if (pgError.code === '23505') {
-        // Postgres unique constraint violation (already on waitlist)
-        setIsSubmitted(true);
-        setEmail('');
-      } else {
-        setSubmitError(pgError.message || 'Failed to join waitlist. Please try again.');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const textRevealVariants = {
+  const textRevealVariants: Variants = {
     hidden: { y: '120%', opacity: 0, rotate: 5 },
     visible: (i: number) => ({
       y: '0%',
@@ -77,15 +36,14 @@ export function LandingPage() {
       transition: {
         delay: i * 0.05,
         duration: 1.2,
-        ease: [0.16, 1, 0.3, 1]
+        ease: [0.16, 1, 0.3, 1] as const
       }
     })
   };
 
   return (
     <ReactLenis root options={{ lerp: 0.05, smoothWheel: true }}>
-      <div ref={containerRef} className="relative bg-[#efe8dc] text-slate-900 selection:bg-indigo-200 overflow-hidden cursor-none font-sans">
-        <CustomCursor />
+      <div ref={containerRef} className="relative bg-[#efe8dc] text-slate-900 selection:bg-indigo-200 overflow-hidden font-sans">
 
         {/* Minimalist Grid Background */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-20">
@@ -105,7 +63,8 @@ export function LandingPage() {
             textClassName="text-2xl font-black tracking-tighter text-white"
           />
           <button
-            onClick={() => navigate('/auth')}
+            onClick={() => navigate('/dashboard')}
+            aria-label="Try Wizzleflow"
             className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full border border-white/20 bg-transparent px-8 py-3 text-sm font-medium transition-all hover:bg-white hover:text-black"
           >
             <span>Try Tool</span>
@@ -161,7 +120,7 @@ export function LandingPage() {
                 Create stunning flowcharts, process maps, and diagrams with a premium, distraction-free canvas.
               </p>
               <button
-                onClick={() => navigate('/auth')}
+                onClick={() => navigate('/dashboard')}
                 className="group inline-flex items-center gap-4 text-lg font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
               >
                 <span>Start Creating</span>
@@ -175,7 +134,7 @@ export function LandingPage() {
         </section>
 
         {/* Features Showcase */}
-        <section className="relative z-20 bg-[#f7f3ea] py-32 md:py-48 border-t border-slate-300">
+        <section id="features" className="relative z-20 bg-[#f7f3ea] py-32 md:py-48 border-t border-slate-300">
           <div className="max-w-[90vw] 2xl:max-w-[1400px] mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 100 }}
@@ -197,13 +156,13 @@ export function LandingPage() {
               {[
                 {
                   title: "Board-First UX",
-                  desc: "Infinite canvas, magnetic connections, and instant layout. Built for speed and precision.",
+                  desc: "A large canvas, magnetic connections, and precise editing controls. Built for speed and clarity.",
                   icon: <Layers className="h-6 w-6 text-slate-900" />,
                   delay: 0.1
                 },
                 {
-                  title: "AI Generation",
-                  desc: "Describe your process. We build the skeleton. You refine the details in seconds.",
+                  title: "AI generation - Coming Soon",
+                  desc: "AI-assisted diagram generation is planned for a future release. Every current diagram remains local and editable.",
                   icon: <Zap className="h-6 w-6 text-slate-900" />,
                   delay: 0.2
                 }
@@ -353,8 +312,8 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* Minimalist Footer / Waitlist */}
-        <section className="relative z-10 w-full bg-[#e8e0d2] py-32 md:py-48 flex items-center justify-center border-t border-slate-300">
+        {/* Direct product call to action */}
+        <section className="relative z-10 w-full bg-[#e8e0d2] py-28 md:py-36 flex items-center justify-center border-t border-slate-300">
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -362,63 +321,30 @@ export function LandingPage() {
             transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
             className="w-full max-w-4xl px-6 flex flex-col items-center text-center"
           >
-            <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase mb-12">
-              Ready to flow.
+            <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase mb-6">
+              Ready to map it out?
             </h2>
-
-            {/* Waitlist Form */}
-            <div className="w-full max-w-xl">
-              <AnimatePresence mode="wait">
-                {isSubmitted ? (
-                  <motion.div
-                    key="success"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-center gap-4 py-6 text-slate-900"
-                  >
-                    <CheckCircle2 className="h-6 w-6 text-indigo-600" />
-                    <span className="text-2xl font-medium tracking-tight">You're on the list.</span>
-                  </motion.div>
-                ) : (
-                  <motion.form
-                    key="form"
-                    exit={{ opacity: 0, y: -20 }}
-                    onSubmit={handleWaitlistSubmit}
-                    className="relative flex flex-col items-center gap-6"
-                  >
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      disabled={isSubmitting}
-                      className="w-full border-b-2 border-slate-300 bg-transparent py-4 text-2xl text-slate-900 placeholder-slate-400 transition-all focus:border-indigo-600 focus:outline-none disabled:opacity-50 text-center"
-                    />
-                    <input
-                      type="email"
-                      required
-                      placeholder="Enter your email address"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={isSubmitting}
-                      className="w-full border-b-2 border-slate-300 bg-transparent py-4 text-2xl text-slate-900 placeholder-slate-400 transition-all focus:border-indigo-600 focus:outline-none disabled:opacity-50 text-center"
-                    />
-                    {submitError && <p className="text-red-500 text-sm font-medium">{submitError}</p>}
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="inline-flex items-center justify-center rounded-full bg-slate-900 px-10 py-4 text-lg font-bold text-white transition-all hover:bg-indigo-600 disabled:opacity-50 active:scale-95 mt-4"
-                    >
-                      {isSubmitting ? 'Wait...' : 'Join Waitlist'}
-                    </button>
-                  </motion.form>
-                )}
-              </AnimatePresence>
+            <p className="max-w-2xl text-lg leading-8 text-slate-600">
+              Open your local workspace immediately. No account, email, or setup is required; your diagrams stay in this browser until you export or remove them.
+            </p>
+            <div className="mt-9 flex flex-col items-center gap-4 sm:flex-row">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="group inline-flex items-center justify-center gap-3 rounded-full bg-slate-900 px-9 py-4 text-base font-bold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300"
+              >
+                Try Tool
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+              </button>
+              <a
+                href="#features"
+                className="rounded-full px-7 py-4 text-sm font-semibold text-slate-700 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300"
+              >
+                View Features
+              </a>
             </div>
 
             <div className="mt-24 pt-8 border-t border-slate-300 w-full flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500 font-medium">
-              <p>&copy; {new Date().getFullYear()} FlowForge. All rights reserved.</p>
+              <p>&copy; {new Date().getFullYear()} Wizzleflow. All rights reserved.</p>
               <div className="flex items-center gap-6">
                 <button onClick={() => navigate('/terms')} className="hover:text-slate-900 transition-colors">Terms of Service</button>
                 <button onClick={() => navigate('/privacy')} className="hover:text-slate-900 transition-colors">Privacy Policy</button>

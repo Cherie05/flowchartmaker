@@ -29,12 +29,32 @@ export function CommandMenu({
   onClose
 }: CommandMenuProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const isDark = workspaceTheme === 'dark';
 
   useEffect(() => {
     if (isOpen) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       window.requestAnimationFrame(() => inputRef.current?.focus());
     }
+    return () => {
+      if (isOpen) previousFocusRef.current?.focus();
+    };
+  }, [isOpen]);
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
   const filteredItems = useMemo(() => {
@@ -55,8 +75,11 @@ export function CommandMenu({
   }
 
   return (
-    <div className="absolute inset-0 z-[70] flex items-start justify-center bg-black/20 px-4 py-16 backdrop-blur-[2px]">
+    <div className="absolute inset-0 z-[70] flex items-start justify-center bg-black/20 px-4 py-16 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command menu"
         className={`w-full max-w-xl rounded-[28px] border shadow-2xl backdrop-blur-xl ${
           isDark
             ? 'border-white/10 bg-[#17191d]/96 shadow-black/50'
@@ -66,6 +89,7 @@ export function CommandMenu({
         <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
           <Search className={`h-4 w-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
           <input
+            aria-label="Search commands"
             ref={inputRef}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
@@ -87,6 +111,7 @@ export function CommandMenu({
           />
           <button
             onClick={onClose}
+            aria-label="Close command menu"
             className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition ${
               isDark
                 ? 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/20 hover:bg-white/[0.08]'

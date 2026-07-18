@@ -1,14 +1,11 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LandingPage } from './pages/LandingPage';
-import { AuthPage } from './pages/AuthPage';
-import { RequireAuth } from './components/RequireAuth';
 import { TermsPage } from './pages/TermsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { MobileBlocker } from './components/MobileBlocker';
-import { analyticsService } from './services/analyticsService';
 
 // Code-split heavy pages for smaller initial bundle
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -26,31 +23,29 @@ function LoadingFallback() {
 }
 
 function App() {
-  useEffect(() => {
-    analyticsService.logEvent('app_opened');
-  }, []);
-
   return (
     <ErrorBoundary>
-      <MobileBlocker />
-      <div className="hidden md:block">
       <BrowserRouter>
         <Suspense fallback={<LoadingFallback />}>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-          <Route path="/editor/:id" element={<RequireAuth><Editor /></RequireAuth>} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route
+              path="/editor/:id"
+              element={
+                <MobileBlocker>
+                  <Editor />
+                </MobileBlocker>
+              }
+            />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
         </Suspense>
       </BrowserRouter>
-      </div>
     </ErrorBoundary>
   );
 }
 
 export default App;
-

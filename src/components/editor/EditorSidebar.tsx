@@ -1,16 +1,10 @@
-import type { Ref } from 'react';
-import { Bot, Circle, Download, FileJson, Keyboard, Loader, Lock, MousePointer2, Square, Trash2, Unlock, Upload, ChevronRight } from 'lucide-react';
+import { Circle, Keyboard, Lock, MousePointer2, Square, Trash2, Unlock, ChevronRight } from 'lucide-react';
 import type { Connection, ConnectionMarker, ConnectionType, FlowChartNode } from '../../types/flowChart';
 import { SelectionMetric, ShortcutRow } from './WorkspaceBits';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
 interface EditorSidebarProps {
   errorMessage: string;
-  aiDescription: string;
-  onAiDescriptionChange: (value: string) => void;
-  onGenerate: () => void;
-  isGenerating: boolean;
-  aiTextareaRef: Ref<HTMLTextAreaElement>;
   nodeTypes: WorkspaceNodeType[];
   addNodeFromPalette: (type: WorkspaceNodeType['type']) => void;
   selectedNodeData: FlowChartNode | null;
@@ -36,22 +30,16 @@ interface EditorSidebarProps {
   updateConnectionColor: (color: string) => void;
   updateConnectionAnimated: (animated: boolean) => void;
   onResetConnectionRoute: () => void;
-  onImport: () => void;
-  onExportJson: () => void;
-  onExportPng: () => void;
-  onExportSvg: () => void;
-  onExportPdf: () => void;
-  onClearBoard: () => void;
   workspaceTheme: WorkspaceTheme;
+  onWorkspaceThemeChange: (theme: WorkspaceTheme) => void;
+  showCanvasHints: boolean;
+  onShowCanvasHintsChange: (visible: boolean) => void;
+  onFitCanvas: () => void;
+  onClose: () => void;
 }
 
 export function EditorSidebar({
   errorMessage,
-  aiDescription,
-  onAiDescriptionChange,
-  onGenerate,
-  isGenerating,
-  aiTextareaRef,
   nodeTypes,
   addNodeFromPalette,
   selectedNodeData,
@@ -74,21 +62,19 @@ export function EditorSidebar({
   updateConnectionColor,
   updateConnectionAnimated,
   onResetConnectionRoute,
-  onImport,
-  onExportJson,
-  onExportPng,
-  onExportSvg,
-  onExportPdf,
-  onClearBoard,
   workspaceTheme,
+  onWorkspaceThemeChange,
+  showCanvasHints,
+  onShowCanvasHintsChange,
+  onFitCanvas,
   onClose
 }: EditorSidebarProps) {
   const isDark = workspaceTheme === 'dark';
   const isNodeLocked = Boolean(selectedNodeData?.locked);
   const hasManualConnectionRoute = Boolean(selectedConnectionData?.waypoints?.length);
   const asideClass = isDark
-    ? 'xl:border-white/8 xl:bg-[#151517]'
-    : 'xl:border-slate-200/80 xl:bg-[#f4efe6]';
+    ? 'lg:border-white/8 lg:bg-[#151517]'
+    : 'lg:border-slate-200/80 lg:bg-[#f4efe6]';
   const sectionClass = isDark
     ? 'border-white/10 bg-[#1b1c20] shadow-[0_24px_70px_-52px_rgba(0,0,0,0.6)]'
     : 'border-white/90 bg-white/92 shadow-[0_24px_65px_-50px_rgba(148,163,184,0.5)]';
@@ -96,19 +82,16 @@ export function EditorSidebar({
   const sectionTitleClass = isDark ? 'text-slate-100' : 'text-slate-900';
   const sectionCopyClass = isDark ? 'text-slate-500' : 'text-slate-600';
   const iconShellClass = isDark ? 'bg-white/[0.05] text-slate-300' : 'bg-slate-100 text-slate-600';
-  const fieldClass = isDark
-    ? 'border-white/10 bg-[#131419] text-slate-100 placeholder:text-slate-500 focus:border-orange-400/40 focus:ring-orange-500/15'
-    : 'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-orange-300 focus:ring-orange-200';
   const softCardClass = isDark ? 'border-white/10 bg-[#131419]' : 'border-slate-200 bg-[#fcfaf6]';
   const softTextClass = isDark ? 'text-slate-400' : 'text-slate-600';
   const softStrongTextClass = isDark ? 'text-slate-100' : 'text-slate-900';
 
   return (
-    <aside className={`w-full shrink-0 xl:flex xl:h-full xl:w-[360px] xl:min-h-0 xl:border-l ${asideClass}`}>
-      <div className="space-y-4 p-4 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-3">
+    <aside aria-label="Diagram inspector" className={`w-full shrink-0 lg:flex lg:h-full lg:w-[320px] lg:min-h-0 lg:border-l xl:w-[344px] ${asideClass}`}>
+      <div className="space-y-4 p-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-3">
         <div className="flex items-center justify-between">
           <h2 className={`font-bold text-lg ${sectionTitleClass}`}>Properties</h2>
-          <button onClick={onClose} className={`rounded-full p-2 transition ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="Hide inspector">
+          <button onClick={onClose} aria-label="Hide diagram inspector" className={`rounded-full p-2 transition ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} title="Hide inspector">
             <ChevronRight className={`h-5 w-5 ${sectionKickerClass}`} />
           </button>
         </div>
@@ -122,49 +105,7 @@ export function EditorSidebar({
           </div>
         )}
 
-        <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p className={`text-xs font-semibold uppercase tracking-[0.24em] flex items-center gap-2 ${sectionKickerClass}`}>
-                AI Composer
-                <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600 tracking-normal">Coming Soon</span>
-              </p>
-              <h3 className={`mt-1 text-lg font-semibold ${sectionTitleClass}`}>Generate a first draft</h3>
-              <p className={`mt-1 text-sm leading-6 ${sectionCopyClass}`}>
-                Write a simple prompt and use the result as a starting point, not the final board.
-              </p>
-            </div>
-            <div className={`rounded-2xl p-2 ${isDark ? 'bg-orange-500/10 text-orange-300' : 'bg-orange-100 text-orange-600'}`}>
-              <Bot className="h-5 w-5" />
-            </div>
-          </div>
-
-          <textarea
-            ref={aiTextareaRef}
-            value={aiDescription}
-            onChange={(e) => onAiDescriptionChange(e.target.value)}
-            disabled={true}
-            placeholder="AI is currently in development..."
-            className={`min-h-[112px] w-full rounded-[20px] border px-4 py-3 text-sm leading-6 outline-none transition opacity-50 cursor-not-allowed ${fieldClass}`}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                onGenerate();
-              }
-            }}
-          />
-
-          <button
-            onClick={onGenerate}
-            disabled={true}
-            className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[20px] px-4 py-3 text-sm font-semibold text-white shadow-xl transition-all duration-200 bg-orange-400 opacity-50 cursor-not-allowed`}
-          >
-            {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            {isGenerating ? 'Generating...' : 'Coming Soon'}
-          </button>
-        </section>
-
-        <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
+        {!selectedNodeData && selectedNodeCount <= 1 && !selectedConnectionData && <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${sectionKickerClass}`}>Quick Add</p>
@@ -192,7 +133,7 @@ export function EditorSidebar({
               </button>
             ))}
           </div>
-        </section>
+        </section>}
 
         <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
           <div className="mb-4 flex items-start justify-between gap-3">
@@ -549,41 +490,19 @@ export function EditorSidebar({
               </button>
             </div>
           ) : (
-            <div
-              className={`rounded-[20px] border border-dashed p-4 text-sm leading-6 ${
-                isDark ? 'border-white/10 bg-[#131419] text-slate-400' : 'border-slate-200 bg-[#fcfaf6] text-slate-600'
-              }`}
-            >
-              Select a node or connection on the canvas to inspect it here. This keeps edits close to the board and out of the way of the workspace.
+            <div className="space-y-4">
+              <p className={`rounded-[20px] border border-dashed p-4 text-sm leading-6 ${isDark ? 'border-white/10 bg-[#131419] text-slate-400' : 'border-slate-200 bg-[#fcfaf6] text-slate-600'}`}>Select a node or connection to edit its properties. Diagram-level settings remain available below.</p>
+              <div className={`rounded-[20px] border p-4 ${softCardClass}`}>
+                <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.22em] ${sectionKickerClass}`}>Canvas theme</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => onWorkspaceThemeChange('light')} aria-pressed={workspaceTheme === 'light'} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${workspaceTheme === 'light' ? 'border-violet-400 bg-violet-50 text-violet-800' : isDark ? 'border-white/10 text-slate-300' : 'border-slate-200 text-slate-700'}`}>Light</button>
+                  <button type="button" onClick={() => onWorkspaceThemeChange('dark')} aria-pressed={workspaceTheme === 'dark'} className={`rounded-xl border px-3 py-2 text-sm font-semibold ${workspaceTheme === 'dark' ? 'border-violet-400 bg-violet-500/15 text-violet-200' : isDark ? 'border-white/10 text-slate-300' : 'border-slate-200 text-slate-700'}`}>Dark</button>
+                </div>
+              </div>
+              <label className={`flex items-center gap-3 rounded-[20px] border p-4 text-sm font-medium ${softCardClass} ${softStrongTextClass}`}><input type="checkbox" checked={showCanvasHints} onChange={(event) => onShowCanvasHintsChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-violet-700 focus:ring-violet-500" />Show canvas guidance</label>
+              <button type="button" onClick={onFitCanvas} className={`w-full rounded-[20px] border px-4 py-3 text-sm font-semibold ${isDark ? 'border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08]' : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'}`}>Fit diagram to view</button>
             </div>
           )}
-        </section>
-
-        <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${sectionKickerClass}`}>Board Actions</p>
-              <h3 className={`mt-1 text-lg font-semibold ${sectionTitleClass}`}>Import, export, reset</h3>
-            </div>
-            <div className={`rounded-2xl p-2 ${iconShellClass}`}>
-              <FileJson className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <ActionButton icon={Upload} label="Import JSON" onClick={onImport} workspaceTheme={workspaceTheme} />
-            <ActionButton icon={Download} label="Export JSON" onClick={onExportJson} workspaceTheme={workspaceTheme} />
-            <ActionButton icon={Download} label="Export PNG" onClick={onExportPng} workspaceTheme={workspaceTheme} />
-            <ActionButton icon={Download} label="Export SVG" onClick={onExportSvg} workspaceTheme={workspaceTheme} />
-            <ActionButton icon={Download} label="Export PDF" onClick={onExportPdf} workspaceTheme={workspaceTheme} />
-            <button
-              onClick={onClearBoard}
-              className="col-span-2 inline-flex items-center justify-center gap-2 rounded-[20px] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
-            >
-              <Trash2 className="h-4 w-4" />
-              Clear board
-            </button>
-          </div>
         </section>
 
         <section className={`rounded-[24px] border p-5 ${sectionClass}`}>
@@ -605,6 +524,7 @@ export function EditorSidebar({
             <ShortcutRow action="Alt + click grouped node" result="Deep-select one node inside a group" theme={workspaceTheme} />
             <ShortcutRow action="R / D / O / L / T" result="Drop process, decision, connector, note, or triangle fast" theme={workspaceTheme} />
             <ShortcutRow action="Cmd/Ctrl + C / V / D" result="Copy, paste, or duplicate selection" theme={workspaceTheme} />
+            <ShortcutRow action="Cmd/Ctrl + Z / Shift + Z" result="Undo or redo the last action" theme={workspaceTheme} />
             <ShortcutRow action="Ctrl/Cmd + wheel" result="Zoom the workspace like a canvas tool" theme={workspaceTheme} />
             <ShortcutRow action="Alt + Arrow key" result="Create a connected step from the selected node" theme={workspaceTheme} />
             <ShortcutRow action="F" result="Fit the current selection" theme={workspaceTheme} />
@@ -653,33 +573,5 @@ function ColorField({
         <span className={`text-sm font-medium ${isDark ? 'text-slate-100' : 'text-slate-900'} ${disabled ? 'opacity-45' : ''}`}>{value}</span>
       </div>
     </label>
-  );
-}
-
-function ActionButton({
-  icon: Icon,
-  label,
-  onClick,
-  workspaceTheme
-}: {
-  icon: typeof Upload;
-  label: string;
-  onClick: () => void;
-  workspaceTheme: WorkspaceTheme;
-}) {
-  const isDark = workspaceTheme === 'dark';
-
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${
-        isDark
-          ? 'border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </button>
   );
 }

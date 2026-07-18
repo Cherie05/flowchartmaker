@@ -71,36 +71,13 @@ export interface FlowChart {
   updatedAt: Date;
 }
 
-export interface AIFlowChartRequest {
-  description: string;
-  style?: 'simple' | 'detailed' | 'process' | 'decision-heavy';
-}
-
-export interface AIFlowChartConnection {
-  fromIndex: number;
-  toIndex: number;
-  fromSide: NodeSide;
-  toSide: NodeSide;
-  label?: string;
-}
-
-export interface AIFlowChartResponse {
-  nodes: Omit<FlowChartNode, 'id'>[];
-  connections: AIFlowChartConnection[];
-  title: string;
-  description: string;
-}
-
 export interface FlowChartRecord {
   id: string;
-  user_id: string;
   name: string;
-  description: string | null;
   nodes: FlowChartNode[];
   connections: Connection[];
   created_at: string;
   updated_at: string;
-  is_public: boolean;
 }
 
 export interface FlowChartDraft {
@@ -109,6 +86,4 @@ export interface FlowChartDraft {
   connections?: Connection[];
 }
 
-export interface FlowChartUpdateInput extends FlowChartDraft {
-  is_public?: boolean;
-}
+export type FlowChartUpdateInput = FlowChartDraft;

@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Validation and Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-deploy:
+  validate-and-build:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +27,10 @@ jobs:
       run: npm run lint
 
     - name: Type Checking
-      run: npx tsc --noEmit
+      run: npm run typecheck
+
+    - name: Unit Tests
+      run: npm test -- --run
 
     - name: Build for Production
       run: npm run build

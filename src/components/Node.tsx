@@ -278,6 +278,8 @@ export function Node({
 
   return (
     <div
+      role="group"
+      aria-label={`${node.type} node: ${node.text.replace(/<[^>]*>/g, '') || 'Untitled'}`}
       className={`group absolute pointer-events-auto select-none text-sm font-medium transition-transform duration-200 ${
         isDragging ? 'z-50 cursor-grabbing' : isSelected ? 'z-30 cursor-grab' : 'z-10 cursor-grab hover:-translate-y-0.5'
       } ${getNodeTextClass(node.type)}`}
@@ -343,10 +345,10 @@ export function Node({
           className="rich-text-toolbar absolute -top-12 left-1/2 -translate-x-1/2 bg-white dark:bg-[#1a1c21] border border-slate-200 dark:border-white/10 rounded-lg shadow-xl p-1 flex gap-1 z-[60]"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <button onMouseDown={(e) => executeCommand('bold', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded font-bold text-slate-700 dark:text-slate-200">B</button>
-          <button onMouseDown={(e) => executeCommand('italic', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded italic font-serif text-slate-700 dark:text-slate-200">I</button>
-          <button onMouseDown={(e) => executeCommand('underline', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded underline text-slate-700 dark:text-slate-200">U</button>
-          <button onMouseDown={(e) => executeCommand('strikeThrough', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded line-through text-slate-700 dark:text-slate-200">S</button>
+          <button aria-label="Bold" onMouseDown={(e) => executeCommand('bold', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded font-bold text-slate-700 dark:text-slate-200">B</button>
+          <button aria-label="Italic" onMouseDown={(e) => executeCommand('italic', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded italic font-serif text-slate-700 dark:text-slate-200">I</button>
+          <button aria-label="Underline" onMouseDown={(e) => executeCommand('underline', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded underline text-slate-700 dark:text-slate-200">U</button>
+          <button aria-label="Strikethrough" onMouseDown={(e) => executeCommand('strikeThrough', e)} className="h-7 w-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded line-through text-slate-700 dark:text-slate-200">S</button>
         </div>
       )}
       <div
@@ -380,6 +382,7 @@ export function Node({
             onDelete();
           }}
           className={`absolute -right-2 -top-2 z-40 flex h-6 w-6 items-center justify-center rounded-full text-xs shadow-md transition-colors duration-200 ${deleteButtonClass}`}
+          aria-label="Delete node"
           title="Delete node"
         >
           x

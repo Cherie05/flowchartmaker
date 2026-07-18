@@ -1,66 +1,72 @@
 # Wizzleflow
 
-Wizzleflow is a professional, local-first React application for creating flowcharts, diagrams, and process maps. It runs fully in the browser with an ultra-sleek UI designed for speed and productivity.
+Wizzleflow is a direct-access, local-first flowchart editor. Open the product, choose **Try Tool**, and create diagrams without an account, sign-in step, or email address.
 
-## 🚀 Features
+## Product model
 
-- **Local-First Architecture:** All flowcharts are saved instantly to your browser's `localStorage`. No user data or diagrams are ever transmitted to a server.
-- **Interactive Editor:** Drag-and-drop nodes, create decision branches, and map processes seamlessly with React Flow.
-- **Dynamic Routing:** Real-time smart pathing prevents lines from overlapping nodes.
-- **High-Performance:** Built on React 18, Vite, and Tailwind CSS.
-- **Waitlist & Analytics:** Secure, insert-only Supabase integration for waitlist lead generation without exposing any private data.
+- The landing page links directly to the local diagram dashboard.
+- Diagrams are created, edited, and autosaved in the browser's `localStorage`.
+- The editor uses a custom HTML/SVG canvas; it does not use React Flow.
+- Starter diagrams are deterministic data bundled with the application and do not call a remote service.
+- PNG, SVG, JSON, and PDF export are available. JSON diagrams can be imported into the editor.
 
-## 🛠️ Tech Stack
+## Storage and backups
 
-- **Frontend:** React 18, TypeScript, Vite
-- **Styling:** Tailwind CSS, Framer Motion, Lucide React
-- **Diagram Engine:** React Flow
-- **Typography:** Space Grotesk & IBM Plex Mono
-- **Database (Optional):** Supabase (strictly used for Waitlist & usage analytics via RLS)
+Diagram data remains in the current browser profile. It is not automatically synchronized to another browser or device. Clearing site data can remove saved diagrams, so export important diagrams as JSON for backup.
 
-## 🏁 Getting Started
+Wizzleflow currently has:
 
-### Prerequisites
+- No account or email requirement
+- No cloud sync or account recovery
+- No collaboration or shared links
+- No mobile-first editing experience (desktop and tablet landscape are recommended)
+- No AI generation, AI chat, or AI workflow analysis
 
-- Node.js 18+
-- npm
+## Technology stack
 
-### Installation
+- React 18 and React DOM 18
+- TypeScript
+- Vite 8
+- Tailwind CSS 3
+- Framer Motion, Lucide React, and Lenis
+- Custom HTML/SVG diagram rendering and connection routing
+- Vitest, Testing Library, and Playwright
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+There is no application backend, database, authentication service, or required runtime environment variable in the current local-first product.
 
-2. Configure Environment Variables:
-   Copy `.env.example` to `.env.local` and add your Supabase keys (only required if you want to use the Waitlist/Analytics features).
-   ```bash
-   cp .env.example .env.local
-   ```
-   *Note: Ensure `.env.local` remains hidden and is never committed to Git.*
+## Local development
 
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-## 🔒 Security & Privacy
-
-Wizzleflow was engineered with privacy at its core:
-- **Zero-Knowledge Backend:** The core editor operates 100% offline.
-- **Secure Database:** Supabase policies are configured as **INSERT-only**. The public frontend has zero `SELECT` privileges, ensuring waitlist and analytics data is impossible to scrape or steal.
-
-## 📦 Build for Production
+Node.js 20 and npm are used by the project workflow.
 
 ```bash
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite. No environment setup or access credentials are required.
+
+## Validation commands
+
+```bash
+npm run lint
+npm run typecheck
+npm test -- --run
+npm run test:e2e
 npm run build
 ```
-Production files are generated in the `dist/` directory, ready to be deployed to Vercel, Netlify, or any static hosting provider.
 
-## 📄 License
+To inspect a production build locally:
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+```bash
+npm run preview
+```
 
----
+Vite writes the static build to `dist/`. Static hosting must provide a single-page application fallback so `/dashboard` and `/editor/:id` resolve to `index.html`.
 
-*Designed and engineered by [Arunvpp](https://arunvpp.xyz).*
+## Privacy
+
+Wizzleflow stores diagram content in browser local storage. No account or email is required, and diagrams are not automatically uploaded or synchronized. The deployed site may still make network requests for hosting, externally loaded fonts, or other static resources. See the in-product privacy page for the current disclosure.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

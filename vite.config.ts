@@ -22,9 +22,6 @@ export default defineConfig({
             if (id.includes('framer-motion')) {
               return 'vendor-motion';
             }
-            if (id.includes('@supabase/supabase-js')) {
-              return 'vendor-supabase';
-            }
             if (id.includes('jspdf') || id.includes('html2canvas')) {
               return 'vendor-export';
             }

@@ -1,4 +1,5 @@
 import { buildConnectionGeometry } from './connectionRouting';
+import { safeSvgColor } from '../features/editor/domain/diagramValidation';
 import type { Connection, FlowChartNode } from '../types/flowChart';
 
 const EXPORT_PADDING = 140;
@@ -18,8 +19,8 @@ export function buildFlowchartExport(nodes: FlowChartNode[], connections: Connec
 
   const defs = connections
     .map((connection) => {
-      const markerId = `marker-${connection.id}`;
-      const color = connection.color ?? '#64748b';
+      const markerId = escapeXmlAttribute(getMarkerId(connection.id));
+      const color = safeSvgColor(connection.color, '#64748b');
 
       return `
         <marker id="${markerId}" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto-start-reverse" markerUnits="strokeWidth">
@@ -100,8 +101,8 @@ function renderConnection(
       .map((node) => offsetNode(node, offsetX, offsetY))
   });
   const path = geometry.path;
-  const color = connection.color ?? '#64748b';
-  const markerId = `marker-${connection.id}`;
+  const color = safeSvgColor(connection.color, '#64748b');
+  const markerId = escapeXmlAttribute(getMarkerId(connection.id));
   const midPoint = geometry.labelPoint;
   const labelWidth = connection.label ? Math.max(58, connection.label.length * 6.5 + 24) : 0;
 
@@ -143,9 +144,9 @@ function renderNode(node: FlowChartNode, offsetX: number, offsetY: number): stri
   const defaults = getNodeDefaults(node.type);
   const x = node.position.x + offsetX;
   const y = node.position.y + offsetY;
-  const fill = node.style?.backgroundColor ?? defaults.fill;
-  const stroke = node.style?.borderColor ?? defaults.stroke;
-  const textColor = node.style?.textColor ?? defaults.text;
+  const fill = safeSvgColor(node.style?.backgroundColor, defaults.fill);
+  const stroke = safeSvgColor(node.style?.borderColor, defaults.stroke);
+  const textColor = safeSvgColor(node.style?.textColor, defaults.text);
   const strokeDasharray = node.style?.borderStyle === 'dashed' ? '8 6' : undefined;
   const strokeOpacity = node.style?.borderStyle === 'none' ? '0' : '1';
   const opacity = node.style?.opacity ?? 1;
@@ -338,6 +339,14 @@ function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function escapeXmlAttribute(value: string): string {
+  return escapeXml(value);
+}
+
+function getMarkerId(connectionId: string): string {
+  return `marker-${encodeURIComponent(connectionId)}`;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
