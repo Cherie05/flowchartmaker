@@ -10,6 +10,7 @@ import {
 import { Lock } from 'lucide-react';
 import type { WorkspaceTheme } from './editor/types';
 import type { FlowChartNode, NodeSide } from '../types/flowChart';
+import { fitFontSize } from '../features/editor/domain/textFit';
 import DOMPurify from 'dompurify';
 
 interface NodeProps {
@@ -352,9 +353,9 @@ export function Node({
         </div>
       )}
       <div
-        className="pointer-events-none relative z-10 flex h-full w-full items-center justify-center p-2"
+        className="pointer-events-none relative z-10 flex h-full w-full items-center justify-center overflow-hidden p-2"
         style={{
-          fontSize: `${fontSize ?? getResponsiveFontSize(node.width, node.height)}px`,
+          fontSize: `${fontSize ?? getResponsiveFontSize(node.width, node.height, node.text)}px`,
           fontWeight,
           textAlign
         }}
@@ -370,7 +371,7 @@ export function Node({
           }}
           onKeyDown={handleInputKeyDown}
           dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(node.text) }}
-          className={`max-w-full whitespace-pre-wrap break-words px-1 text-[13px] font-medium leading-[1.35] tracking-[-0.01em] bg-transparent border-none outline-none text-inherit ${isEditing ? 'pointer-events-auto cursor-text select-text' : 'pointer-events-none select-none'}`}
+          className={`max-h-full max-w-full whitespace-pre-wrap break-words px-1 font-medium leading-[1.3] tracking-[-0.01em] bg-transparent border-none outline-none text-inherit ${isEditing ? 'pointer-events-auto cursor-text select-text' : 'pointer-events-none select-none'}`}
         />
       </div>
 
@@ -632,6 +633,11 @@ function getClosestSide(
   return (Object.entries(distances).sort((left, right) => left[1] - right[1])[0]?.[0] ?? 'right') as NodeSide;
 }
 
-function getResponsiveFontSize(width: number, height: number) {
-  return Math.max(12, Math.min(18, Math.min(width / 8.4, height / 3.8)));
+function getResponsiveFontSize(width: number, height: number, text?: string) {
+  const base = Math.min(18, Math.min(width / 8.4, height / 3.8));
+  if (!text) return Math.max(12, base);
+
+  // Shrink long labels until the wrapped text fits, rather than letting it
+  // spill outside the shape at certain zoom levels.
+  return fitFontSize(text, width, height, { min: 9, max: Math.max(9, base) });
 }

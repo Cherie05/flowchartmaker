@@ -81,24 +81,58 @@ describe('layoutAiDiagram', () => {
     ],
   );
 
+  const VERTICAL_GAP = 170;
+
   it('does not inflate vertical depth when a retry back-edge is present', () => {
-    const positions = layoutAiDiagram(retryLoop);
+    const positions = layoutAiDiagram(retryLoop, { verticalGap: VERTICAL_GAP });
     const ys = [...positions.values()].map((point) => point.y);
     const span = Math.max(...ys) - Math.min(...ys);
 
-    // Longest forward path is 8 hops, so with the default 170px gap the whole
-    // diagram should fit well within ~1400px. Before back-edge detection the
-    // cycle unrolled repeatedly and pushed this past 1900px.
-    expect(span).toBeLessThanOrEqual(8 * 170);
+    // The longest forward path is 8 hops, so the diagram must not exceed that
+    // depth. Before back-edge detection the cycle unrolled repeatedly and
+    // pushed this well past it.
+    expect(span).toBeLessThanOrEqual(8 * VERTICAL_GAP);
   });
 
   it('keeps the retry target adjacent to the start rather than pushed to the bottom', () => {
-    const positions = layoutAiDiagram(retryLoop);
+    const positions = layoutAiDiagram(retryLoop, { verticalGap: VERTICAL_GAP });
     const startY = positions.get('start')?.y ?? 0;
     const enterCredsY = positions.get('enterCreds')?.y ?? 0;
 
     // enterCreds is one hop from start; the retry edge must not relocate it.
-    expect(enterCredsY - startY).toBe(170);
+    expect(enterCredsY - startY).toBe(VERTICAL_GAP);
+  });
+
+  it('keeps an early-exit end node beside its decision instead of at the bottom', () => {
+    // Mirrors the refund workflow: an "ineligible" exit branches off early and
+    // should sit just below its decision, not span the whole diagram.
+    const refund = diagram(
+      [
+        start,
+        { key: 'check', kind: 'process', label: 'Check Eligibility', description: '' },
+        { key: 'eligible', kind: 'decision', label: 'Is Eligible?', description: '' },
+        { key: 'ineligible', kind: 'end', label: 'Notify Ineligible', description: '' },
+        { key: 'approve', kind: 'process', label: 'Request Approval', description: '' },
+        { key: 'process', kind: 'process', label: 'Process Refund', description: '' },
+        end,
+      ],
+      [
+        { key: 'a', from: 'start', to: 'check', label: '' },
+        { key: 'b', from: 'check', to: 'eligible', label: '' },
+        { key: 'c', from: 'eligible', to: 'ineligible', label: 'No' },
+        { key: 'd', from: 'eligible', to: 'approve', label: 'Yes' },
+        { key: 'e', from: 'approve', to: 'process', label: '' },
+        { key: 'f', from: 'process', to: 'end', label: '' },
+      ],
+    );
+
+    const positions = layoutAiDiagram(refund, { verticalGap: VERTICAL_GAP });
+    const eligibleY = positions.get('eligible')?.y ?? 0;
+    const ineligibleY = positions.get('ineligible')?.y ?? 0;
+
+    // One layer below its parent decision, not dragged down to the final layer.
+    expect(ineligibleY - eligibleY).toBe(VERTICAL_GAP);
+    expect(ineligibleY).toBeLessThan(positions.get('end')?.y ?? 0);
   });
 
   it('produces the same layout with and without a pure back-edge', () => {

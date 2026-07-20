@@ -29,6 +29,33 @@ describe('materializeAiDiagram', () => {
     expect(first.connections[0].to).toBe(first.nodes[1].id);
   });
 
+  it('grows nodes so long generated labels stay inside the shape', () => {
+    const longLabel: AiDiagram = {
+      schemaVersion: '1.0',
+      title: 'Refund',
+      summary: 'Refund flow.',
+      assumptions: [],
+      nodes: [
+        { key: 'start', kind: 'start', label: 'Start', description: '' },
+        { key: 'notify', kind: 'process', label: 'Notify Customer: Refund Processed Successfully', description: '' },
+        { key: 'end', kind: 'end', label: 'Done', description: '' },
+      ],
+      edges: [
+        { key: 'a', from: 'start', to: 'notify', label: '' },
+        { key: 'b', from: 'notify', to: 'end', label: '' },
+      ],
+    };
+
+    const result = materializeAiDiagram(longLabel);
+    const short = result.nodes.find((node) => node.text === 'Start');
+    const long = result.nodes.find((node) => node.text.startsWith('Notify Customer'));
+
+    expect(long!.width).toBeGreaterThan(short!.width);
+    expect(long!.width).toBeLessThanOrEqual(240);
+    // Must still fit the horizontal gap so siblings cannot collide.
+    expect(long!.width).toBeLessThan(300);
+  });
+
   it('routes forward edges top-to-bottom and retry back-edges around the side', () => {
     const withRetry: AiDiagram = {
       schemaVersion: '1.0',

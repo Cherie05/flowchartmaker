@@ -1,5 +1,13 @@
 import type { AiDiagram, AiDiagramNode } from '../../../../shared/ai/aiDiagramSchema';
 import { getNodeDefaults } from '../../editor/domain/nodeDefaults';
+import {
+  AVERAGE_GLYPH_RATIO,
+  LINE_HEIGHT_RATIO,
+  NODE_TEXT_PADDING,
+  charsPerLineAt,
+  estimateWrappedLines,
+  toPlainLabel,
+} from '../../editor/domain/textFit';
 import { createId } from '../../../lib/createId';
 import type { Connection, FlowChartNode, FlowChartNodeType } from '../../../types/flowChart';
 import { layoutAiDiagram, type AiLayoutOptions } from '../layout/layoutAiDiagram';
@@ -32,13 +40,14 @@ export function materializeAiDiagram(
     if (!position) throw new Error(`AI node ${source.key} does not have a layout position`);
     const id = createId('ai-node');
     idByKey.set(source.key, id);
+    const { width, height } = fitNodeToLabel(source.label, defaults.width, defaults.height);
     return {
       id,
       type,
       position: { ...position },
       text: source.label,
-      width: defaults.width,
-      height: defaults.height,
+      width,
+      height,
       style: defaults.style,
     };
   });
@@ -68,6 +77,30 @@ export function materializeAiDiagram(
   });
 
   return { title: diagram.title, summary: diagram.summary, nodes, connections };
+}
+
+/**
+ * Grows a node past its default size when the generated label needs the room.
+ * Model labels are routinely longer than the hand-placed defaults assume, and
+ * a fixed box makes that text wrap out of the shape.
+ */
+function fitNodeToLabel(label: string, defaultWidth: number, defaultHeight: number): { width: number; height: number } {
+  const text = toPlainLabel(label);
+  if (!text) return { width: defaultWidth, height: defaultHeight };
+
+  const TARGET_FONT_SIZE = 13;
+  const MAX_WIDTH = 240;
+
+  // Widen up to the cap so long labels get fewer, shorter lines, then give the
+  // box whatever height those wrapped lines actually need at the target size.
+  const singleLineWidth = text.length * TARGET_FONT_SIZE * AVERAGE_GLYPH_RATIO + NODE_TEXT_PADDING;
+  const width = Math.round(Math.min(MAX_WIDTH, Math.max(defaultWidth, singleLineWidth / 2)));
+  const lines = estimateWrappedLines(text, charsPerLineAt(TARGET_FONT_SIZE, width));
+  const height = Math.round(
+    Math.max(defaultHeight, lines * TARGET_FONT_SIZE * LINE_HEIGHT_RATIO + NODE_TEXT_PADDING + 8),
+  );
+
+  return { width, height };
 }
 
 export function getAddToDiagramOrigin(existingNodes: FlowChartNode[]): Pick<AiLayoutOptions, 'originX' | 'originY'> {

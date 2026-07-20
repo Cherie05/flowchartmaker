@@ -525,9 +525,14 @@ export function Editor() {
   }, [flowChart.nodes, setSelectedNode]);
 
   const handleAcceptAiDiagram = useCallback((diagram: AiDiagram, mode: 'replace' | 'add') => {
+    // Replacement diagrams are centred in the workspace. Laying them out near
+    // the left edge leaves them stranded there, because the fit-to-view scroll
+    // clamps at 0 and cannot pull narrow content back into the middle.
     const generated = materializeAiDiagram(
       diagram,
-      mode === 'add' ? getAddToDiagramOrigin(flowChart.nodes) : undefined
+      mode === 'add'
+        ? getAddToDiagramOrigin(flowChart.nodes)
+        : { originX: MIN_WORKSPACE_WIDTH / 2, originY: WORKSPACE_SAFE_TOP }
     );
 
     if (mode === 'replace') {

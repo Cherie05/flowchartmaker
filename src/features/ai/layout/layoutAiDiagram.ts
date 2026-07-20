@@ -59,8 +59,10 @@ export function layoutAiDiagram(
 ): Map<string, AiLayoutPosition> {
   const originX = options.originX ?? 480;
   const originY = options.originY ?? 280;
-  const horizontalGap = options.horizontalGap ?? 260;
-  const verticalGap = options.verticalGap ?? 170;
+  // Wide enough to clear the largest label-fitted node without overlap, and
+  // tight enough vertically that a deep workflow still reads on one screen.
+  const horizontalGap = options.horizontalGap ?? 300;
+  const verticalGap = options.verticalGap ?? 150;
   const keys = diagram.nodes.map((node) => node.key);
   const keyOrder = new Map(keys.map((key, index) => [key, index]));
 
@@ -88,16 +90,10 @@ export function layoutAiDiagram(
     }
   }
 
-  // Keep terminal states below the work that leads into them.
-  const maxNonEndLayer = Math.max(0, ...diagram.nodes
-    .filter((node) => node.kind !== 'end')
-    .map((node) => layers.get(node.key) ?? 0));
-  for (const node of diagram.nodes) {
-    if (node.kind === 'end') {
-      const parentLayer = Math.max(-1, ...(incoming.get(node.key) ?? []).map((edge) => layers.get(edge.from) ?? 0));
-      layers.set(node.key, Math.max(layers.get(node.key) ?? 0, parentLayer + 1, maxNonEndLayer + 1));
-    }
-  }
+  // End nodes stay directly below the step that reaches them (already handled
+  // by the longest-path pass). Dragging every terminal state down to a shared
+  // bottom layer stretches the diagram and forces long edges to sweep back
+  // across the canvas, so early exits are left where they naturally belong.
 
   const grouped = new Map<number, string[]>();
   for (const key of keys) {
