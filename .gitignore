@@ -10,11 +10,15 @@ lerna-debug.log*
 # Node Modules
 node_modules
 dist
+dist-server
 dist-ssr
 *.local
 
 # Environment Variables & API Keys
 .env
+.env.local
+.env.*.local
+server/.env
 .env.*
 !.env.example
 

@@ -1,4 +1,4 @@
-import { Copy, GitBranch, Lock, Plus, Route, Trash2, Unlock } from 'lucide-react';
+import { Copy, GitBranch, Lock, Plus, Route, Trash2, Unlock, Wand2 } from 'lucide-react';
 import type { ConnectionMarker, ConnectionType, FlowChartNode } from '../../types/flowChart';
 import type { WorkspaceNodeType, WorkspaceTheme } from './types';
 
@@ -14,6 +14,7 @@ type NodeToolbarProps = {
   onDuplicate: () => void;
   onToggleLock: () => void;
   onDelete: () => void;
+  onEditWithAi: () => void;
 };
 
 type ConnectionToolbarProps = {
@@ -46,6 +47,7 @@ type MultiToolbarProps = {
   onSendBackward: () => void;
   onLock: () => void;
   onUnlock: () => void;
+  onEditWithAi: () => void;
 };
 
 type SelectionContextBarProps = {
@@ -104,6 +106,7 @@ export function SelectionContextBar(props: SelectionContextBarProps) {
             <ToolbarButton icon={GitBranch} label="Branch" onClick={props.onQuickCreateDown} className={buttonClass} disabled={props.isLocked} />
             <ToolbarButton icon={Route} label="Add block" onClick={props.onOpenQuickAdd} className={buttonClass} disabled={props.isLocked} />
             <ToolbarButton icon={Copy} label="Duplicate" onClick={props.onDuplicate} className={buttonClass} />
+            <ToolbarButton icon={Wand2} label="Edit with AI" onClick={props.onEditWithAi} className={buttonClass} disabled={props.isLocked} />
             <ToolbarButton
               icon={props.isLocked ? Unlock : Lock}
               label={props.isLocked ? 'Unlock' : 'Lock'}
@@ -120,6 +123,7 @@ export function SelectionContextBar(props: SelectionContextBarProps) {
               <ToolbarButton icon={Route} label="Distribute H" onClick={props.onDistributeHorizontal} className={buttonClass} disabled={props.hasLockedNodes} />
               <ToolbarButton icon={Route} label="Distribute V" onClick={props.onDistributeVertical} className={buttonClass} disabled={props.hasLockedNodes} />
               <ToolbarButton icon={GitBranch} label="Tidy" onClick={props.onTidy} className={buttonClass} disabled={props.hasLockedNodes} />
+              <ToolbarButton icon={Wand2} label="Edit with AI" onClick={props.onEditWithAi} className={buttonClass} disabled={props.hasLockedNodes} />
               <ToolbarButton icon={Copy} label="Group" onClick={props.onGroup} className={buttonClass} disabled={props.hasLockedNodes} />
               <ToolbarButton
                 icon={Copy}

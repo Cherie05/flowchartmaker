@@ -53,4 +53,24 @@ describe('useFlowChart connection history', () => {
 
     expect(result.current.flowChart.connections[0]?.animated).toBe(true);
   });
+
+  it('undoes an accepted generated diagram replacement in one action', () => {
+    const { result } = renderHook(() => useFlowChart());
+    act(() => result.current.addNode('process', { x: 100, y: 100 }));
+    const originalId = result.current.flowChart.nodes[0].id;
+
+    act(() => result.current.replaceFlowChartContent({
+      name: 'Generated workflow',
+      nodes: [
+        { id: 'generated-start', type: 'start', text: 'Start', width: 132, height: 60, position: { x: 200, y: 100 } },
+        { id: 'generated-end', type: 'end', text: 'End', width: 132, height: 60, position: { x: 200, y: 300 } },
+      ],
+      connections: [{ id: 'generated-edge', from: 'generated-start', to: 'generated-end', fromSide: 'bottom', toSide: 'top' }],
+    }));
+    expect(result.current.flowChart.nodes).toHaveLength(2);
+
+    act(() => result.current.undo());
+    expect(result.current.flowChart.nodes).toHaveLength(1);
+    expect(result.current.flowChart.nodes[0].id).toBe(originalId);
+  });
 });

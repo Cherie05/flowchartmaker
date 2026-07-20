@@ -32,6 +32,10 @@ export function PrivacyPage() {
             <p>Clearing browser storage can permanently remove saved diagrams. Export important diagrams regularly so you have a backup you control.</p>
           </section>
           <section>
+            <h2 className="mb-3 text-2xl font-semibold text-slate-900">Optional AI generation</h2>
+            <p>When you explicitly click Generate, the process description you entered is sent through Wizzleflow's server to Google's Gemini service to create a proposed flowchart. The Gemini API key remains on the server. Your saved diagrams remain in browser local storage and are not automatically synchronized.</p>
+          </section>
+          <section>
             <h2 className="mb-3 text-2xl font-semibold text-slate-900">Website delivery</h2>
             <p>The website host and externally loaded assets, such as fonts, may receive standard network request information. The Wizzleflow application does not send diagram content to a diagram-storage service.</p>
           </section>

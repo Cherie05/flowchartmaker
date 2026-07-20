@@ -34,6 +34,14 @@ import { EditorTopBar } from '../components/editor/EditorTopBar';
 import type { WorkspaceNodeType, WorkspaceTheme } from '../components/editor/types';
 import { useFlowChart } from '../hooks/useFlowChart';
 import { getKeyboardNudge, getKeyboardViewportPan } from '../features/editor/commands/keyboardCommands';
+import { AiFlowchartModal } from '../features/ai/components/AiFlowchartModal';
+import { AiReviewModal } from '../features/ai/components/AiReviewModal';
+import { AiTestCasesModal } from '../features/ai/components/AiTestCasesModal';
+import { AiEditSelectionModal } from '../features/ai/components/AiEditSelectionModal';
+import { getAddToDiagramOrigin, materializeAiDiagram } from '../features/ai/adapter/materializeAiDiagram';
+import { toAiEditorDiagram } from '../features/ai/adapter/toAiEditorDiagram';
+import { applyAiEditToDiagram } from '../features/ai/adapter/applyAiEdit';
+import type { AiDiagram } from '../../shared/ai/aiDiagramSchema';
 import { safeSvgColor, validateImportFileSize, validateImportedDiagram } from '../features/editor/domain/diagramValidation';
 import { getNodeDefaults } from '../features/editor/domain/nodeDefaults';
 import { getStarterDiagramDraft } from '../features/dashboard/diagramTemplates';
@@ -206,6 +214,10 @@ export function Editor() {
 
   const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction>(null);
   const [toast, setToast] = useState<EditorToast | null>(null);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isAiReviewModalOpen, setIsAiReviewModalOpen] = useState(false);
+  const [isAiTestCasesModalOpen, setIsAiTestCasesModalOpen] = useState(false);
+  const [isAiEditModalOpen, setIsAiEditModalOpen] = useState(false);
 
   const notify = useCallback((message: string, tone: ToastTone = 'info') => {
     setToast({ message, tone });
@@ -511,6 +523,58 @@ export function Editor() {
     setSelectedNode(resolvedPrimaryId);
     setSelectedConnection(null);
   }, [flowChart.nodes, setSelectedNode]);
+
+  const handleAcceptAiDiagram = useCallback((diagram: AiDiagram, mode: 'replace' | 'add') => {
+    const generated = materializeAiDiagram(
+      diagram,
+      mode === 'add' ? getAddToDiagramOrigin(flowChart.nodes) : undefined
+    );
+
+    if (mode === 'replace') {
+      replaceFlowChartContent({
+        name: generated.title,
+        nodes: generated.nodes,
+        connections: generated.connections
+      });
+      setFlowchartName(generated.title);
+    } else {
+      transformFlowChart((previous) => ({
+        ...previous,
+        nodes: [...previous.nodes, ...generated.nodes],
+        connections: [...previous.connections, ...generated.connections],
+        updatedAt: new Date()
+      }));
+    }
+
+    const generatedIds = generated.nodes.map((node) => node.id);
+    setSelectedNodeIds(generatedIds);
+    setSelectedNode(generatedIds[generatedIds.length - 1] ?? null);
+    setSelectedConnection(null);
+    setIsAiModalOpen(false);
+    scheduleScrollToNodes(generated.nodes);
+    notify('AI flowchart added. Saving locally…', 'success');
+  }, [flowChart.nodes, notify, replaceFlowChartContent, scheduleScrollToNodes, setSelectedNode, transformFlowChart]);
+
+  const aiEditorDiagram = useMemo(
+    () => toAiEditorDiagram(flowchartName, flowChart.nodes, flowChart.connections),
+    [flowchartName, flowChart.nodes, flowChart.connections]
+  );
+
+  const handleAcceptAiEdit = useCallback((fragment: AiDiagram) => {
+    const result = applyAiEditToDiagram(flowChart.nodes, flowChart.connections, selectedNodeIds, fragment);
+    transformFlowChart((previous) => ({
+      ...previous,
+      nodes: result.nodes,
+      connections: result.connections,
+      updatedAt: new Date()
+    }));
+    setSelectedNodeIds(result.insertedNodeIds);
+    setSelectedNode(result.insertedNodeIds[result.insertedNodeIds.length - 1] ?? null);
+    setSelectedConnection(null);
+    setIsAiEditModalOpen(false);
+    scheduleScrollToNodes(result.nodes.filter((node) => result.insertedNodeIds.includes(node.id)));
+    notify('AI edit applied. Saving locally…', 'success');
+  }, [flowChart.nodes, flowChart.connections, selectedNodeIds, notify, scheduleScrollToNodes, setSelectedNode, transformFlowChart]);
 
   const getWorkspacePoint = useCallback((clientX: number, clientY: number): Position => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -1265,6 +1329,11 @@ export function Editor() {
   );
 
   const commandMenuItems: CommandMenuItem[] = [
+    {
+      id: 'generate-ai',
+      title: 'Generate with AI',
+      description: 'Create an editable flowchart from a process description.'
+    },
     ...nodeTypes.map((nodeType) => ({
       id: `add-${nodeType.type}`,
       title: `Add ${nodeType.label}`,
@@ -1361,7 +1430,7 @@ export function Editor() {
     {
       id: 'toggle-right-panel',
       title: isRightSidebarCollapsed ? 'Show right inspector' : 'Hide right inspector',
-      description: 'Collapse or expand the AI and inspector sidebar.'
+      description: 'Collapse or expand the inspector sidebar.'
     },
     {
       id: 'toggle-hints',
@@ -1554,6 +1623,9 @@ export function Editor() {
     }
 
     switch (item.id) {
+      case 'generate-ai':
+        setIsAiModalOpen(true);
+        break;
       case 'fit-canvas':
         scheduleScrollToNodes(flowChart.nodes);
         break;
@@ -2526,6 +2598,37 @@ export function Editor() {
 
   return (
     <div className={`h-screen overflow-hidden ${shellClass}`}>
+      {isAiModalOpen && (
+        <AiFlowchartModal
+          isOpen
+          hasExistingContent={flowChart.nodes.length > 0 || flowChart.connections.length > 0}
+          onClose={() => setIsAiModalOpen(false)}
+          onAccept={handleAcceptAiDiagram}
+        />
+      )}
+      {isAiReviewModalOpen && (
+        <AiReviewModal
+          isOpen
+          diagram={aiEditorDiagram}
+          onClose={() => setIsAiReviewModalOpen(false)}
+        />
+      )}
+      {isAiTestCasesModalOpen && (
+        <AiTestCasesModal
+          isOpen
+          diagram={aiEditorDiagram}
+          onClose={() => setIsAiTestCasesModalOpen(false)}
+        />
+      )}
+      {isAiEditModalOpen && (
+        <AiEditSelectionModal
+          isOpen
+          diagram={aiEditorDiagram}
+          selectedNodeIds={selectedNodeIds}
+          onClose={() => setIsAiEditModalOpen(false)}
+          onAccept={handleAcceptAiEdit}
+        />
+      )}
       <ConfirmModal
         isOpen={pendingDestructiveAction !== null}
         title={pendingDestructiveAction === 'clearBoard' ? 'Clear board' : 'Delete selected nodes'}
@@ -2563,6 +2666,10 @@ export function Editor() {
               workspaceTheme={workspaceTheme}
               onThemeChange={setWorkspaceTheme}
               onImport={() => fileInputRef.current?.click()}
+              onGenerateWithAi={() => setIsAiModalOpen(true)}
+              onReviewWithAi={() => setIsAiReviewModalOpen(true)}
+              onGenerateTestCasesWithAi={() => setIsAiTestCasesModalOpen(true)}
+              hasDiagramContent={flowChart.nodes.length > 0}
               onExportPng={(transparent) => void handleExport('png', { transparent })}
               onExportSvg={(transparent) => void handleExport('svg', { transparent })}
               onExportPdf={() => void handleExport('pdf')}
@@ -2639,6 +2746,7 @@ export function Editor() {
                 onSendBackward={() => moveSelectionInStack('back')}
                 onLock={() => setSelectionLocked(true)}
                 onUnlock={() => setSelectionLocked(false)}
+                onEditWithAi={() => setIsAiEditModalOpen(true)}
               />
 
               <SelectionContextBar
@@ -2682,6 +2790,7 @@ export function Editor() {
                     setSelectedNode(null);
                   }
                 }}
+                onEditWithAi={() => setIsAiEditModalOpen(true)}
               />
 
               <SelectionContextBar

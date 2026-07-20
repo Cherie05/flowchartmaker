@@ -161,8 +161,8 @@ export function LandingPage() {
                   delay: 0.1
                 },
                 {
-                  title: "AI generation - Coming Soon",
-                  desc: "AI-assisted diagram generation is planned for a future release. Every current diagram remains local and editable.",
+                  title: "AI flowchart generation",
+                  desc: "Generate a validated flowchart from a process description, review it, then add it as ordinary editable diagram content.",
                   icon: <Zap className="h-6 w-6 text-slate-900" />,
                   delay: 0.2
                 }
