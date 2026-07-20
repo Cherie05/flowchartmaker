@@ -14,12 +14,10 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  // Replace "id" with the real namespace id from `wrangler kv namespace create RATE_LIMIT_KV`
-  // (or Workers & Pages -> Storage & Databases -> KV in the dashboard) before deploying.
   "kv_namespaces": [
     {
       "binding": "RATE_LIMIT_KV",
-      "id": "REPLACE_WITH_REAL_KV_NAMESPACE_ID"
+      "id": "f9e371d0eb134f56bbafe7c320da73f5"
     }
   ]
 }
