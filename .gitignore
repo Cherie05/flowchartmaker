@@ -43,3 +43,6 @@ playwright/.cache/
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# Thumbnails and media
+images/
