@@ -14,6 +14,12 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  // Not secret -- a plain quota number. Raised from the code default of 3 so
+  // a judge running generate/review/edit/test-cases in one sitting doesn't
+  // get blocked mid-demo.
+  "vars": {
+    "AI_DAILY_LIMIT": "5"
+  },
   "kv_namespaces": [
     {
       "binding": "RATE_LIMIT_KV",
