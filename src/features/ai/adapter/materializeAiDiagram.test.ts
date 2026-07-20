@@ -1,5 +1,6 @@
 import type { AiDiagram } from '../../../../shared/ai/aiDiagramSchema';
 import { getAddToDiagramOrigin, materializeAiDiagram } from './materializeAiDiagram';
+import { charsPerLineAt, estimateWrappedLines, fitFontSize, getInscribedTextBox } from '../../editor/domain/textFit';
 
 const input: AiDiagram = {
   schemaVersion: '1.0',
@@ -54,6 +55,49 @@ describe('materializeAiDiagram', () => {
     expect(long!.width).toBeLessThanOrEqual(240);
     // Must still fit the horizontal gap so siblings cannot collide.
     expect(long!.width).toBeLessThan(300);
+  });
+
+  // Reproduces the reported bug exactly: "Manager Approves?" and "Sufficient
+  // Balance?" overflowed their diamonds because sizing used the node's full
+  // bounding box, when a diamond's usable area is a much smaller inscribed
+  // square. Confirms both that the node grows and that the label genuinely
+  // fits the shape's inscribed area at the font size the renderer will pick.
+  it.each([
+    ['Manager Approves?'],
+    ['Sufficient Balance?'],
+    ['Is Eligible?'],
+  ])('grows a decision diamond so "%s" fits inside it, not just its bounding box', (label) => {
+    const diagram: AiDiagram = {
+      schemaVersion: '1.0',
+      title: 'Approval',
+      summary: 'Approval flow.',
+      assumptions: [],
+      nodes: [
+        { key: 'start', kind: 'start', label: 'Start', description: '' },
+        { key: 'q', kind: 'decision', label, description: '' },
+        { key: 'yes', kind: 'end', label: 'Yes', description: '' },
+        { key: 'no', kind: 'end', label: 'No', description: '' },
+      ],
+      edges: [
+        { key: 'a', from: 'start', to: 'q', label: '' },
+        { key: 'b', from: 'q', to: 'yes', label: 'Yes' },
+        { key: 'c', from: 'q', to: 'no', label: 'No' },
+      ],
+    };
+
+    const result = materializeAiDiagram(diagram);
+    const node = result.nodes.find((n) => n.text === label)!;
+
+    // Grew past the 120x80 decision default.
+    expect(node.width * node.height).toBeGreaterThan(120 * 80);
+
+    // The label must fit the *inscribed* diamond, at whatever font size
+    // Node.tsx would actually render (mirrors getResponsiveFontSize).
+    const inscribed = getInscribedTextBox('decision', node.width, node.height);
+    const base = Math.min(18, node.width / 8.4, node.height / 3.8);
+    const fontSize = fitFontSize(label, inscribed.width, inscribed.height, { min: 9, max: Math.max(9, base) });
+    const lines = estimateWrappedLines(label, charsPerLineAt(fontSize, inscribed.width));
+    expect(lines * fontSize * 1.3).toBeLessThanOrEqual(inscribed.height - 16);
   });
 
   it('routes forward edges top-to-bottom and retry back-edges around the side', () => {

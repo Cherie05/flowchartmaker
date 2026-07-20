@@ -6,6 +6,8 @@ import {
   NODE_TEXT_PADDING,
   charsPerLineAt,
   estimateWrappedLines,
+  getInscribedTextBox,
+  growNodeForInnerBox,
   toPlainLabel,
 } from '../../editor/domain/textFit';
 import { createId } from '../../../lib/createId';
@@ -40,7 +42,7 @@ export function materializeAiDiagram(
     if (!position) throw new Error(`AI node ${source.key} does not have a layout position`);
     const id = createId('ai-node');
     idByKey.set(source.key, id);
-    const { width, height } = fitNodeToLabel(source.label, defaults.width, defaults.height);
+    const { width, height } = fitNodeToLabel(type, source.label, defaults.width, defaults.height);
     return {
       id,
       type,
@@ -83,24 +85,41 @@ export function materializeAiDiagram(
  * Grows a node past its default size when the generated label needs the room.
  * Model labels are routinely longer than the hand-placed defaults assume, and
  * a fixed box makes that text wrap out of the shape.
+ *
+ * Sizing works against the shape's *inscribed* text area, not its outer box --
+ * a diamond or circle needs a much bigger outer box than a rectangle would for
+ * the same amount of usable text room.
  */
-function fitNodeToLabel(label: string, defaultWidth: number, defaultHeight: number): { width: number; height: number } {
+function fitNodeToLabel(
+  type: FlowChartNodeType,
+  label: string,
+  defaultWidth: number,
+  defaultHeight: number,
+): { width: number; height: number } {
   const text = toPlainLabel(label);
   if (!text) return { width: defaultWidth, height: defaultHeight };
 
   const TARGET_FONT_SIZE = 13;
-  const MAX_WIDTH = 240;
+  const MAX_INNER_WIDTH = 240;
 
-  // Widen up to the cap so long labels get fewer, shorter lines, then give the
-  // box whatever height those wrapped lines actually need at the target size.
+  const defaultInner = getInscribedTextBox(type, defaultWidth, defaultHeight);
   const singleLineWidth = text.length * TARGET_FONT_SIZE * AVERAGE_GLYPH_RATIO + NODE_TEXT_PADDING;
-  const width = Math.round(Math.min(MAX_WIDTH, Math.max(defaultWidth, singleLineWidth / 2)));
-  const lines = estimateWrappedLines(text, charsPerLineAt(TARGET_FONT_SIZE, width));
-  const height = Math.round(
-    Math.max(defaultHeight, lines * TARGET_FONT_SIZE * LINE_HEIGHT_RATIO + NODE_TEXT_PADDING + 8),
+  const innerWidth = Math.min(MAX_INNER_WIDTH, Math.max(defaultInner.width, singleLineWidth / 2));
+  const lines = estimateWrappedLines(text, charsPerLineAt(TARGET_FONT_SIZE, innerWidth));
+  const innerHeight = Math.max(
+    defaultInner.height,
+    lines * TARGET_FONT_SIZE * LINE_HEIGHT_RATIO + NODE_TEXT_PADDING + 8,
   );
 
-  return { width, height };
+  const grown = growNodeForInnerBox(type, innerWidth, innerHeight, defaultWidth, defaultHeight);
+  // A diamond/circle needs a disproportionately larger outer box than a
+  // rectangle for the same text room, so cap the outer size directly rather
+  // than let a long decision question balloon the node.
+  const MAX_OUTER = 320;
+  return {
+    width: Math.round(Math.min(MAX_OUTER, grown.width)),
+    height: Math.round(Math.min(MAX_OUTER, grown.height)),
+  };
 }
 
 export function getAddToDiagramOrigin(existingNodes: FlowChartNode[]): Pick<AiLayoutOptions, 'originX' | 'originY'> {

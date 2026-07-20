@@ -59,9 +59,10 @@ export function layoutAiDiagram(
 ): Map<string, AiLayoutPosition> {
   const originX = options.originX ?? 480;
   const originY = options.originY ?? 280;
-  // Wide enough to clear the largest label-fitted node without overlap, and
-  // tight enough vertically that a deep workflow still reads on one screen.
-  const horizontalGap = options.horizontalGap ?? 300;
+  // Wide enough to clear two adjacent max-width (320px) label-fitted nodes
+  // without overlap, and tight enough vertically that a deep workflow still
+  // reads on one screen.
+  const horizontalGap = options.horizontalGap ?? 340;
   const verticalGap = options.verticalGap ?? 150;
   const keys = diagram.nodes.map((node) => node.key);
   const keyOrder = new Map(keys.map((key, index) => [key, index]));
