@@ -47,12 +47,20 @@ export function materializeAiDiagram(
     const from = idByKey.get(source.from);
     const to = idByKey.get(source.to);
     if (!from || !to) throw new Error(`AI edge ${source.key} references an unknown node`);
+
+    // A retry/back edge points to a node at or above its source. Routing it
+    // bottom-to-top would draw it straight back through the forward flow, so
+    // send it around the side instead.
+    const fromPosition = positions.get(source.from);
+    const toPosition = positions.get(source.to);
+    const isBackEdge = Boolean(fromPosition && toPosition && toPosition.y <= fromPosition.y);
+
     return {
       id: createId('ai-edge'),
       from,
       to,
-      fromSide: 'bottom',
-      toSide: 'top',
+      fromSide: isBackEdge ? 'right' : 'bottom',
+      toSide: isBackEdge ? 'right' : 'top',
       label: source.label || undefined,
       type: 'elbow',
       endMarker: 'arrow',

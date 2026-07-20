@@ -1,4 +1,4 @@
-import type { AiDiagram } from '../../../../shared/ai/aiDiagramSchema';
+import type { AiDiagram, AiDiagramEdge } from '../../../../shared/ai/aiDiagramSchema';
 
 export interface AiLayoutPosition {
   x: number;
@@ -12,6 +12,47 @@ export interface AiLayoutOptions {
   verticalGap?: number;
 }
 
+/**
+ * Identifies back-edges (edges closing a cycle) with a depth-first search.
+ * Layering must ignore them: a retry loop points backwards in the flow, so
+ * counting it as forward progress unrolls the cycle and inflates depth.
+ */
+function findBackEdgeKeys(diagram: AiDiagram): Set<string> {
+  const outgoing = new Map<string, AiDiagramEdge[]>(diagram.nodes.map((node) => [node.key, []]));
+  for (const edge of diagram.edges) {
+    outgoing.get(edge.from)?.push(edge);
+  }
+
+  const VISITING = 1;
+  const DONE = 2;
+  const state = new Map<string, number>();
+  const backEdgeKeys = new Set<string>();
+
+  const visit = (key: string) => {
+    state.set(key, VISITING);
+    for (const edge of outgoing.get(key) ?? []) {
+      const targetState = state.get(edge.to);
+      if (targetState === VISITING) {
+        backEdgeKeys.add(edge.key);
+      } else if (targetState === undefined) {
+        visit(edge.to);
+      }
+    }
+    state.set(key, DONE);
+  };
+
+  // Start nodes first so cycles are cut at the edge that points backwards
+  // relative to the natural flow, then sweep up anything unreachable.
+  for (const node of diagram.nodes) {
+    if (node.kind === 'start' && state.get(node.key) === undefined) visit(node.key);
+  }
+  for (const node of diagram.nodes) {
+    if (state.get(node.key) === undefined) visit(node.key);
+  }
+
+  return backEdgeKeys;
+}
+
 export function layoutAiDiagram(
   diagram: AiDiagram,
   options: AiLayoutOptions = {},
@@ -22,43 +63,38 @@ export function layoutAiDiagram(
   const verticalGap = options.verticalGap ?? 170;
   const keys = diagram.nodes.map((node) => node.key);
   const keyOrder = new Map(keys.map((key, index) => [key, index]));
-  const outgoing = new Map(keys.map((key) => [key, [] as string[]]));
-  const incoming = new Map(keys.map((key) => [key, [] as string[]]));
 
-  for (const edge of diagram.edges) {
-    outgoing.get(edge.from)?.push(edge.to);
-    incoming.get(edge.to)?.push(edge.from);
+  const backEdgeKeys = findBackEdgeKeys(diagram);
+  const forwardEdges = diagram.edges.filter((edge) => !backEdgeKeys.has(edge.key));
+  const outgoing = new Map<string, AiDiagramEdge[]>(keys.map((key) => [key, []]));
+  const incoming = new Map<string, AiDiagramEdge[]>(keys.map((key) => [key, []]));
+  for (const edge of forwardEdges) {
+    outgoing.get(edge.from)?.push(edge);
+    incoming.get(edge.to)?.push(edge);
   }
 
-  const starts = diagram.nodes.filter((node) => node.kind === 'start').map((node) => node.key);
-  const startSet = new Set(starts);
-  const layers = new Map<string, number>();
-  const queue = starts.map((key) => ({ key, layer: 0 }));
-  const processedAt = new Map<string, number>();
+  // Longest-path layering over the remaining DAG via topological order.
+  const indegree = new Map(keys.map((key) => [key, incoming.get(key)?.length ?? 0]));
+  const layers = new Map(keys.map((key) => [key, 0]));
+  const queue = keys.filter((key) => (indegree.get(key) ?? 0) === 0);
   while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) continue;
-    const previous = processedAt.get(current.key);
-    if (previous !== undefined && previous >= current.layer) continue;
-    processedAt.set(current.key, current.layer);
-    layers.set(current.key, Math.max(layers.get(current.key) ?? 0, current.layer));
-    if (current.layer >= keys.length) continue;
-    for (const child of outgoing.get(current.key) ?? []) {
-      if (startSet.has(child)) continue;
-      queue.push({ key: child, layer: current.layer + 1 });
+    const key = queue.shift();
+    if (!key) continue;
+    for (const edge of outgoing.get(key) ?? []) {
+      layers.set(edge.to, Math.max(layers.get(edge.to) ?? 0, (layers.get(key) ?? 0) + 1));
+      const remaining = (indegree.get(edge.to) ?? 0) - 1;
+      indegree.set(edge.to, remaining);
+      if (remaining === 0) queue.push(edge.to);
     }
   }
 
-  for (const key of keys) {
-    if (!layers.has(key)) layers.set(key, 0);
-  }
-
+  // Keep terminal states below the work that leads into them.
   const maxNonEndLayer = Math.max(0, ...diagram.nodes
     .filter((node) => node.kind !== 'end')
     .map((node) => layers.get(node.key) ?? 0));
   for (const node of diagram.nodes) {
     if (node.kind === 'end') {
-      const parentLayer = Math.max(-1, ...(incoming.get(node.key) ?? []).map((key) => layers.get(key) ?? 0));
+      const parentLayer = Math.max(-1, ...(incoming.get(node.key) ?? []).map((edge) => layers.get(edge.from) ?? 0));
       layers.set(node.key, Math.max(layers.get(node.key) ?? 0, parentLayer + 1, maxNonEndLayer + 1));
     }
   }
@@ -95,11 +131,11 @@ export function layoutAiDiagram(
 
 function averageParentX(
   key: string,
-  incoming: Map<string, string[]>,
+  incoming: Map<string, AiDiagramEdge[]>,
   positions: Map<string, AiLayoutPosition>,
 ): number {
   const parentPositions = (incoming.get(key) ?? [])
-    .map((parent) => positions.get(parent)?.x)
+    .map((edge) => positions.get(edge.from)?.x)
     .filter((x): x is number => x !== undefined);
   if (parentPositions.length === 0) return Number.POSITIVE_INFINITY;
   return parentPositions.reduce((sum, x) => sum + x, 0) / parentPositions.length;

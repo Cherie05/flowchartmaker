@@ -47,5 +47,63 @@ describe('layoutAiDiagram', () => {
       }
     }
   });
+
+  // A retry loop must not inflate the layout: the back-edge should be ignored
+  // when assigning layers, so depth stays proportional to the forward path.
+  const retryLoop = diagram(
+    [
+      start,
+      { key: 'enterCreds', kind: 'inputOutput', label: 'Enter Credentials', description: '' },
+      { key: 'validate', kind: 'process', label: 'Validate', description: '' },
+      { key: 'valid', kind: 'decision', label: 'Valid?', description: '' },
+      { key: 'jwt', kind: 'process', label: 'Generate JWT', description: '' },
+      { key: 'loginOk', kind: 'end', label: 'Login Successful', description: '' },
+      { key: 'increment', kind: 'process', label: 'Increment Counter', description: '' },
+      { key: 'failures', kind: 'decision', label: 'Failures >= 3?', description: '' },
+      { key: 'showError', kind: 'process', label: 'Show Error', description: '' },
+      { key: 'lock', kind: 'process', label: 'Lock Account', description: '' },
+      { key: 'unlockEmail', kind: 'process', label: 'Send Unlock Email', description: '' },
+      end,
+    ],
+    [
+      { key: 'e1', from: 'start', to: 'enterCreds', label: '' },
+      { key: 'e2', from: 'enterCreds', to: 'validate', label: '' },
+      { key: 'e3', from: 'validate', to: 'valid', label: '' },
+      { key: 'e4', from: 'valid', to: 'jwt', label: 'Yes' },
+      { key: 'e5', from: 'jwt', to: 'loginOk', label: '' },
+      { key: 'e6', from: 'valid', to: 'increment', label: 'No' },
+      { key: 'e7', from: 'increment', to: 'failures', label: '' },
+      { key: 'e8', from: 'failures', to: 'showError', label: 'No' },
+      { key: 'e9', from: 'showError', to: 'enterCreds', label: 'Retry' },
+      { key: 'e10', from: 'failures', to: 'lock', label: 'Yes' },
+      { key: 'e11', from: 'lock', to: 'unlockEmail', label: '' },
+      { key: 'e12', from: 'unlockEmail', to: 'end', label: '' },
+    ],
+  );
+
+  it('does not inflate vertical depth when a retry back-edge is present', () => {
+    const positions = layoutAiDiagram(retryLoop);
+    const ys = [...positions.values()].map((point) => point.y);
+    const span = Math.max(...ys) - Math.min(...ys);
+
+    // Longest forward path is 8 hops, so with the default 170px gap the whole
+    // diagram should fit well within ~1400px. Before back-edge detection the
+    // cycle unrolled repeatedly and pushed this past 1900px.
+    expect(span).toBeLessThanOrEqual(8 * 170);
+  });
+
+  it('keeps the retry target adjacent to the start rather than pushed to the bottom', () => {
+    const positions = layoutAiDiagram(retryLoop);
+    const startY = positions.get('start')?.y ?? 0;
+    const enterCredsY = positions.get('enterCreds')?.y ?? 0;
+
+    // enterCreds is one hop from start; the retry edge must not relocate it.
+    expect(enterCredsY - startY).toBe(170);
+  });
+
+  it('produces the same layout with and without a pure back-edge', () => {
+    const withoutLoop = diagram(retryLoop.nodes, retryLoop.edges.filter((edge) => edge.key !== 'e9'));
+    expect([...layoutAiDiagram(retryLoop)]).toEqual([...layoutAiDiagram(withoutLoop)]);
+  });
 });
 

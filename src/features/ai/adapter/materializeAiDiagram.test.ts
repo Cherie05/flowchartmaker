@@ -29,6 +29,39 @@ describe('materializeAiDiagram', () => {
     expect(first.connections[0].to).toBe(first.nodes[1].id);
   });
 
+  it('routes forward edges top-to-bottom and retry back-edges around the side', () => {
+    const withRetry: AiDiagram = {
+      schemaVersion: '1.0',
+      title: 'Retry workflow',
+      summary: 'Retries on failure.',
+      assumptions: [],
+      nodes: [
+        { key: 'start', kind: 'start', label: 'Start', description: '' },
+        { key: 'attempt', kind: 'process', label: 'Attempt', description: '' },
+        { key: 'ok', kind: 'decision', label: 'Succeeded?', description: '' },
+        { key: 'done', kind: 'end', label: 'Done', description: '' },
+      ],
+      edges: [
+        { key: 'a', from: 'start', to: 'attempt', label: '' },
+        { key: 'b', from: 'attempt', to: 'ok', label: '' },
+        { key: 'c', from: 'ok', to: 'attempt', label: 'No' },
+        { key: 'd', from: 'ok', to: 'done', label: 'Yes' },
+      ],
+    };
+
+    const result = materializeAiDiagram(withRetry);
+    const idByLabel = new Map(result.nodes.map((node) => [node.text, node.id]));
+    const backEdge = result.connections.find(
+      (connection) => connection.from === idByLabel.get('Succeeded?') && connection.to === idByLabel.get('Attempt'),
+    );
+    const forwardEdge = result.connections.find(
+      (connection) => connection.from === idByLabel.get('Start') && connection.to === idByLabel.get('Attempt'),
+    );
+
+    expect(backEdge).toMatchObject({ fromSide: 'right', toSide: 'right', label: 'No' });
+    expect(forwardEdge).toMatchObject({ fromSide: 'bottom', toSide: 'top' });
+  });
+
   it('does not mutate canonical input and offsets additions beyond existing content', () => {
     const snapshot = structuredClone(input);
     materializeAiDiagram(input);

@@ -65,8 +65,8 @@ export function AiReviewModal({ isOpen, diagram, onClose }: AiReviewModalProps) 
               <p className="mt-4 text-sm text-slate-500">No issues found.</p>
             ) : (
               <ul className="mt-4 space-y-3">
-                {review.findings.map((finding, index) => (
-                  <li key={index} className={`rounded-2xl border p-4 text-sm ${SEVERITY_STYLE[finding.severity]}`}>
+                {review.findings.map((finding) => (
+                  <li key={`${finding.severity}:${finding.category}:${finding.message}`} className={`rounded-2xl border p-4 text-sm ${SEVERITY_STYLE[finding.severity]}`}>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-xs font-semibold uppercase tracking-wider">{finding.severity} · {finding.category}</span>
                     </div>

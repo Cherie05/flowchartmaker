@@ -137,6 +137,11 @@ export function AiFlowchartModal({ isOpen, hasExistingContent, onClose, onAccept
                   : 'AI generation is currently unavailable.'}
               </div>
             )}
+            {availability?.configured && (
+              <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                Free limit: 3 generations per day, with a 20-second wait between attempts. Manual editing always remains available.
+              </p>
+            )}
             <label htmlFor={promptId} className="mt-6 block text-sm font-semibold text-slate-800">Process description</label>
             <textarea ref={promptRef} id={promptId} value={prompt} maxLength={MAX_PROMPT_LENGTH} disabled={loading} onChange={(event) => setPrompt(event.target.value)} rows={7} placeholder="Describe the steps, decisions, and possible outcomes…" className="mt-2 w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-500 focus:ring-4 focus:ring-violet-100 disabled:bg-slate-50" />
             <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500"><span>Process descriptions are sent to Gemini only when you click Generate.</span><span aria-label={`${prompt.length} of ${MAX_PROMPT_LENGTH} characters`}>{prompt.length}/{MAX_PROMPT_LENGTH}</span></div>
@@ -153,7 +158,6 @@ export function AiFlowchartModal({ isOpen, hasExistingContent, onClose, onAccept
             {loading && <div role="status" aria-live="polite" className="mt-5 flex items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-800"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />{LOADING_MESSAGES[loadingStep]}</div>}
             {error && <div role="alert" className="mt-5 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}</div>}
 
-            <p className="mt-5 text-xs text-slate-500">Prototype limit: up to 3 attempts per IP each day, with a 20-second cooldown. Manual editing always remains available.</p>
             <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={handleClose} className="rounded-xl bg-slate-100 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200">{loading ? 'Cancel request' : 'Cancel'}</button>
               <button type="button" onClick={() => void handleGenerate()} disabled={loading || !prompt.trim() || !availability?.configured} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 py-3 font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300"><Sparkles className="h-4 w-4" aria-hidden="true" />Generate</button>

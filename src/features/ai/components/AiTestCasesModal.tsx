@@ -56,8 +56,8 @@ export function AiTestCasesModal({ isOpen, diagram, onClose }: AiTestCasesModalP
             <p className="mt-6 text-sm text-slate-500">No test cases were returned.</p>
           ) : (
             <ul className="mt-6 space-y-3">
-              {testCases.map((testCase, index) => (
-                <li key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              {testCases.map((testCase) => (
+                <li key={`${testCase.title}:${testCase.expectedOutcome}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
                   <p className="font-semibold text-slate-950">{testCase.title}</p>
                   <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Inputs</p>
                   <p className="text-slate-700">{testCase.inputs.join(', ')}</p>
