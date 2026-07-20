@@ -1,4 +1,4 @@
-# 🌊 Wizzleflow 
+# 🌊 Wizzleflow
 
 **An intuitive, local-first flowchart editor built for speed and powered by AI.**
 
@@ -8,9 +8,10 @@ Created for the **OpenAI Build Week**.
 
 ## 🚀 The Pitch
 
-Creating flowcharts usually involves signing up for a bloated SaaS tool, wrestling with manual layout mechanics, or paying monthly subscriptions. 
+Creating flowcharts usually involves signing up for a bloated SaaS tool, wrestling with manual layout mechanics, or paying monthly subscriptions.
 
-**Wizzleflow** is different. It’s a direct-access, local-first flowchart editor that runs entirely in your browser. 
+**Wizzleflow** is different. It’s a direct-access, local-first flowchart editor that runs entirely in your browser.
+
 - **Zero friction:** No account, no email, no sign-in required.
 - **Lightning fast:** Diagrams are saved directly to your browser's local storage.
 - **AI-Powered:** Describe your process in plain English, and the AI instantly generates a logically complete, properly routed, and editable flowchart for you.
@@ -38,6 +39,7 @@ For the **OpenAI Build Week**, we focused on solving the deterministic layout pr
 > **Note on AI Provider:** While this project was built for the OpenAI Build Week, the codebase currently uses the **Google Gemini API** for LLM structured outputs because Gemini provides a generous free tier for developers, whereas OpenAI requires a paid account. The structured graph generation pipeline concept remains identical regardless of the provider used.
 
 We built a **structured JSON schema pipeline** that forces the AI to return exactly the format our custom canvas engine needs:
+
 1. **System Prompting:** Defines strict node types (start, process, decision, inputOutput, end) and routing rules.
 2. **Structured Outputs:** Guarantees that every `edge` references a valid `nodeId` that actually exists in the generation payload.
 3. **BFS Layout Engine:** A custom breadth-first search algorithm computes X/Y coordinates dynamically based on the AI's logical output, routing connections automatically.
@@ -47,17 +49,21 @@ We built a **structured JSON schema pipeline** that forces the AI to return exac
 Requires Node.js 20+.
 
 1. Clone the repository and install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Set up your environment variables:
+
 ```bash
 cp .env.example .env
 ```
-*(Add your Gemini API key to `.env`)*
+
+_(Add your Gemini API key to `.env`)_
 
 3. Start the development server (Frontend + API):
+
 ```bash
 npm run dev
 ```
@@ -67,6 +73,7 @@ npm run dev
 ## 🛡️ Privacy & Storage
 
 Wizzleflow is fundamentally local-first.
+
 - Diagrams never leave your browser unless you explicitly invoke an AI feature.
 - AI features only send the prompt (or current canvas state) at the exact moment you click "Generate" or "Review".
 - There is no database. Your data belongs to you.
