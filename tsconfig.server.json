@@ -12,7 +12,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "sourceMap": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node"]
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
   "exclude": ["server/**/*.test.ts", "shared/**/*.test.ts"]

@@ -2,14 +2,24 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wizzleflow",
   "compatibility_date": "2026-07-20",
+  "main": "worker/index.ts",
   "observability": {
     "enabled": true
   },
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
   },
   "compatibility_flags": [
     "nodejs_compat"
+  ],
+  // Replace "id" with the real namespace id from `wrangler kv namespace create RATE_LIMIT_KV`
+  // (or Workers & Pages -> Storage & Databases -> KV in the dashboard) before deploying.
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT_KV",
+      "id": "REPLACE_WITH_REAL_KV_NAMESPACE_ID"
+    }
   ]
 }
